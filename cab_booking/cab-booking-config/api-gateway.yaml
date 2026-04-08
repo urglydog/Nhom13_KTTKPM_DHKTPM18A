@@ -1,0 +1,41 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          enabled: false
+          lower-case-service-id: true
+      routes:
+        - id: auth-service
+          uri: http://auth-service:8081
+          predicates:
+            - Path=/auth/**
+
+logging:
+  level:
+    root: INFO
+    # Tắt log chi tiết về việc Mapping và Matching Route mỗi vài giây
+    org.springframework.cloud.gateway.route.RouteDefinitionRouteLocator: INFO
+
+    # Nếu vẫn còn thấy log liên quan đến việc tìm Route trong bộ nhớ
+    org.springframework.cloud.gateway.repository.InMemoryRouteDefinitionRepository: INFO
+
+    # Tắt log của bộ nạp Route định kỳ
+    org.springframework.cloud.gateway.route.CachingRouteLocator: INFO
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://eureka-server:8761/eureka/
+    register-with-eureka: true
+    fetch-registry: true
+    registry-fetch-interval-seconds: 30
+  instance:
+    prefer-ip-address: true
+    instance-id: ${spring.application.name}:${server.port}:${random.value}
