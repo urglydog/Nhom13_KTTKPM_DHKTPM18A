@@ -1,0 +1,23 @@
+services:
+  config-server:
+    build: .
+    container_name: config-server
+    ports:
+      - "8888:8888"
+    environment:
+        - CONFIG_LOCATION=file:/app/cab-booking-config/
+        - SPRING_PROFILES_ACTIVE=native
+    volumes:
+      - ../cab-booking-config:/app/cab-booking-config
+      - maven-cache:/root/.m2
+    networks:
+      - cab-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:8888/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  maven-cache:
+    driver: local
