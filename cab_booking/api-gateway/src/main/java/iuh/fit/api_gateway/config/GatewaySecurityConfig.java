@@ -26,7 +26,9 @@ public class GatewaySecurityConfig {
             "/api/auth/**",
             "/eureka/**",
             "/eta/**",
-            "/api/eta/**"
+            "/api/eta/**",
+            "/api/notifications/**",
+            "/api/reviews/**"
     };
 
     @Bean
@@ -37,6 +39,8 @@ public class GatewaySecurityConfig {
                 .authorizeExchange(exchange -> exchange
                         .pathMatchers(HttpMethod.OPTIONS).permitAll()
                         .pathMatchers(PUBLIC_URLS).permitAll()
+                        .pathMatchers("/api/notifications/**").permitAll()
+                        .pathMatchers("/api/reviews/**").permitAll()
                         .anyExchange().authenticated());
 
         return http.build();
