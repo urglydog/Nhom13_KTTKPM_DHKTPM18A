@@ -1,20 +1,16 @@
 package iuh.fit.api_gateway.config;
 
-import com.nimbusds.jose.jwk.JWK;
+import iuh.fit.common.config.JwtSupport;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.reactive.EnableWebFluxSecurity;
 import org.springframework.security.config.web.server.ServerHttpSecurity;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.web.server.SecurityWebFilterChain;
 import org.springframework.web.cors.reactive.CorsConfigurationSource;
 import org.springframework.web.cors.reactive.UrlBasedCorsConfigurationSource;
 
-import java.nio.charset.StandardCharsets;
-import java.security.interfaces.RSAPublicKey;
 import java.time.Duration;
 import java.util.List;
 
@@ -65,13 +61,6 @@ public class GatewaySecurityConfig {
 
     @Bean
     public JwtDecoder jwtDecoder() throws Exception {
-        ClassPathResource resource = new ClassPathResource("certs/public_key.pem");
-        String pem = new String(resource.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-
-        JWK jwk = JWK.parseFromPEMEncodedObjects(pem);
-        RSAPublicKey publicKey = jwk.toRSAKey().toRSAPublicKey();
-
-        // Trả về Decoder chuẩn của Spring
-        return NimbusJwtDecoder.withPublicKey(publicKey).build();
+        return JwtSupport.createJwtDecoder();
     }
 }
