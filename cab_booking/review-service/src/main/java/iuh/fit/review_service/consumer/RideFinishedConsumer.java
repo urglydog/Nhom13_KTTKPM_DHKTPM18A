@@ -13,11 +13,11 @@ public class RideFinishedConsumer {
     @KafkaListener(topics = "ride.finished", groupId = "review-group")
     public void consumeRideFinishedEvent(Map<String, Object> event) {
         log.info("Consumed ride finished event: {}", event);
-        
+
         String rideId = (String) event.get("rideId");
         String customerId = (String) event.get("customerId");
-        
-        // In a real system, you might create a placeholder for a review 
+
+        // In a real system, you might create a placeholder for a review
         // or notify the user to leave a review.
         log.info("Ride {} finished for customer {}. Ready for review.", rideId, customerId);
     }

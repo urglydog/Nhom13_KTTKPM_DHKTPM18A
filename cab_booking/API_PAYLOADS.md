@@ -519,7 +519,64 @@ Payload duoi day da duoc test pass qua gateway:
 ### 3.8 Earnings Summary
 `GET /api/drivers/me/earnings/summary`
 
-### 3.9 Sample Driver Profile Response
+### 3.9 Internal Driver Availability Check
+`GET /internal/drivers/{driverId}/availability`
+
+Endpoint nay danh cho service-to-service call de kiem tra nhanh tai xe dang `ONLINE` hay `OFFLINE`.
+Moi lan check se phat lai event Kafka len topic `driver.status.changed` de service khac co the subscribe.
+
+Vi du:
+
+```text
+GET http://localhost:8084/internal/drivers/driver-3/availability
+```
+
+Sample response:
+
+```json
+{
+  "code": 200,
+  "message": "Checked driver availability successfully",
+  "result": {
+    "externalUserId": "driver-3",
+    "availabilityStatus": "ONLINE",
+    "online": true,
+    "offline": false,
+    "activeForBooking": true,
+    "verificationStatus": "APPROVED",
+    "currentRideId": null,
+    "currentRideStatus": null,
+    "currentLatitude": 10.780000,
+    "currentLongitude": 106.690000,
+    "lastOnlineAt": "2026-05-10T16:34:02"
+  },
+  "timestamp": "2026-05-10T16:34:02"
+}
+```
+
+Kafka event duoc phat cung luc:
+
+```json
+{
+  "eventId": "9d31d4c2-2dd8-4a87-82a0-442f70858bc5",
+  "type": "DriverStatusChanged",
+  "driverId": "driver-3",
+  "availabilityStatus": "ONLINE",
+  "activeForBooking": true,
+  "rideId": null,
+  "rideStatus": null,
+  "currentLocation": {
+    "lat": 10.780000,
+    "lng": 106.690000
+  },
+  "timestamp": "2026-05-10T09:34:02Z"
+}
+```
+
+Consumer hien co trong `booking-service`:
+- `@KafkaListener(topics = "driver.status.changed", groupId = "booking-service-group")`
+
+### 3.10 Sample Driver Profile Response
 
 ```json
 {
