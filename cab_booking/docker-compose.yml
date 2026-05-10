@@ -10,6 +10,8 @@ include:
   - driver-service/docker-compose.yaml
   - notification-service/docker-compose.yaml
   - review-service/docker-compose.yaml
+  - Pricing-Service/docker-compose.yaml
+  - Payment-Service/docker-compose.yaml
 
 services:
   redis:
