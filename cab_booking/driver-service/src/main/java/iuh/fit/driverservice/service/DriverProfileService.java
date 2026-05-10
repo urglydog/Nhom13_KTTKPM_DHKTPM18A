@@ -2,6 +2,9 @@ package iuh.fit.driverservice.service;
 
 import iuh.fit.common.exception.AppException;
 import iuh.fit.common.exception.ErrorCode;
+import iuh.fit.driverservice.dto.event.DriverLocationPayload;
+import iuh.fit.driverservice.dto.event.DriverStatusEvent;
+import iuh.fit.driverservice.dto.event.RideAssignedEvent;
 import iuh.fit.driverservice.dto.request.CompleteDriverRideRequest;
 import iuh.fit.driverservice.dto.request.HandleDriverAssignmentRequest;
 import iuh.fit.driverservice.dto.request.UpdateDriverAvailabilityRequest;
@@ -11,6 +14,7 @@ import iuh.fit.driverservice.dto.response.DriverAvailabilityResponse;
 import iuh.fit.driverservice.dto.response.DriverCurrentRideResponse;
 import iuh.fit.driverservice.dto.response.DriverEarningsSummaryResponse;
 import iuh.fit.driverservice.dto.response.DriverProfileResponse;
+import iuh.fit.driverservice.dto.response.DriverStatusCheckResponse;
 import iuh.fit.driverservice.entity.DriverAssignmentAction;
 import iuh.fit.driverservice.entity.DriverAvailabilityStatus;
 import iuh.fit.driverservice.entity.DriverProfile;
@@ -20,18 +24,25 @@ import iuh.fit.driverservice.repository.DriverProfileRepository;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
+import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 public class DriverProfileService {
+    static final String RIDE_ASSIGNED_TOPIC = "ride.assigned";
+    static final String DRIVER_STATUS_CHANGED_TOPIC = "driver.status.changed";
+
     DriverProfileRepository driverProfileRepository;
+    KafkaTemplate<String, Object> kafkaTemplate;
 
     @Transactional
     public DriverProfileResponse getProfile(String externalUserId) {
@@ -80,17 +91,22 @@ public class DriverProfileService {
             profile.setLastOnlineAt(LocalDateTime.now());
         }
 
-        return toAvailabilityResponse(driverProfileRepository.save(profile));
+        DriverProfile savedProfile = driverProfileRepository.save(profile);
+        publishDriverStatusChanged(savedProfile, savedProfile.getCurrentRideId(), currentRideStatusName(savedProfile));
+        return toAvailabilityResponse(savedProfile);
     }
 
     @Transactional
     public DriverCurrentRideResponse handleAssignment(String externalUserId, HandleDriverAssignmentRequest request) {
         DriverProfile profile = getOrCreateProfileEntity(externalUserId);
         DriverAssignmentAction action = DriverAssignmentAction.valueOf(request.getAction().trim().toUpperCase());
+        String requestedRideId = request.getRideId();
 
         if (action == DriverAssignmentAction.REJECT) {
             clearCurrentRide(profile, DriverAvailabilityStatus.ONLINE);
-            return toCurrentRideResponse(driverProfileRepository.save(profile));
+            DriverProfile savedProfile = driverProfileRepository.save(profile);
+            publishDriverStatusChanged(savedProfile, requestedRideId, "REJECTED");
+            return toCurrentRideResponse(savedProfile);
         }
 
         if (profile.getVerificationStatus() != DriverVerificationStatus.APPROVED) {
@@ -109,7 +125,10 @@ public class DriverProfileService {
         profile.setAvailabilityStatus(DriverAvailabilityStatus.ON_TRIP);
         profile.setLastOnlineAt(LocalDateTime.now());
 
-        return toCurrentRideResponse(driverProfileRepository.save(profile));
+        DriverProfile savedProfile = driverProfileRepository.save(profile);
+        publishRideAssigned(savedProfile.getCurrentRideId(), savedProfile.getExternalUserId());
+        publishDriverStatusChanged(savedProfile, savedProfile.getCurrentRideId(), currentRideStatusName(savedProfile));
+        return toCurrentRideResponse(savedProfile);
     }
 
     @Transactional
@@ -127,13 +146,16 @@ public class DriverProfileService {
         profile.setAvailabilityStatus(DriverAvailabilityStatus.ON_TRIP);
         profile.setLastOnlineAt(LocalDateTime.now());
 
-        return toCurrentRideResponse(driverProfileRepository.save(profile));
+        DriverProfile savedProfile = driverProfileRepository.save(profile);
+        publishDriverStatusChanged(savedProfile, savedProfile.getCurrentRideId(), currentRideStatusName(savedProfile));
+        return toCurrentRideResponse(savedProfile);
     }
 
     @Transactional
     public DriverCurrentRideResponse completeCurrentRide(String externalUserId, CompleteDriverRideRequest request) {
         DriverProfile profile = getRequiredProfile(externalUserId);
         ensureCurrentRideExists(profile);
+        String completedRideId = profile.getCurrentRideId();
 
         profile.setTotalCompletedRides(profile.getTotalCompletedRides() + 1);
         profile.setTotalEarnings(profile.getTotalEarnings().add(request.getFareAmount()));
@@ -141,7 +163,9 @@ public class DriverProfileService {
         profile.setLastOnlineAt(request.getCompletedAt() == null ? LocalDateTime.now() : request.getCompletedAt());
 
         clearCurrentRide(profile, DriverAvailabilityStatus.ONLINE);
-        return toCurrentRideResponse(driverProfileRepository.save(profile));
+        DriverProfile savedProfile = driverProfileRepository.save(profile);
+        publishDriverStatusChanged(savedProfile, completedRideId, DriverRideStatus.COMPLETED.name());
+        return toCurrentRideResponse(savedProfile);
     }
 
     @Transactional(readOnly = true)
@@ -162,6 +186,13 @@ public class DriverProfileService {
                 .currentRideActive(profile.getCurrentRideId() != null)
                 .lastOnlineAt(profile.getLastOnlineAt())
                 .build();
+    }
+
+    @Transactional
+    public DriverStatusCheckResponse checkAvailability(String externalUserId) {
+        DriverProfile profile = getRequiredProfile(externalUserId);
+        publishDriverStatusChanged(profile, profile.getCurrentRideId(), currentRideStatusName(profile));
+        return toStatusCheckResponse(profile);
     }
 
     @Transactional
@@ -240,6 +271,24 @@ public class DriverProfileService {
                 .build();
     }
 
+    private DriverStatusCheckResponse toStatusCheckResponse(DriverProfile profile) {
+        DriverAvailabilityStatus availabilityStatus = profile.getAvailabilityStatus();
+        return DriverStatusCheckResponse.builder()
+                .externalUserId(profile.getExternalUserId())
+                .availabilityStatus(availabilityStatus.name())
+                .online(availabilityStatus == DriverAvailabilityStatus.ONLINE
+                        || availabilityStatus == DriverAvailabilityStatus.ON_TRIP)
+                .offline(availabilityStatus == DriverAvailabilityStatus.OFFLINE)
+                .activeForBooking(isActiveForBooking(profile))
+                .verificationStatus(profile.getVerificationStatus().name())
+                .currentRideId(profile.getCurrentRideId())
+                .currentRideStatus(currentRideStatusName(profile))
+                .currentLatitude(profile.getCurrentLatitude())
+                .currentLongitude(profile.getCurrentLongitude())
+                .lastOnlineAt(profile.getLastOnlineAt())
+                .build();
+    }
+
     private DriverCurrentRideResponse toCurrentRideResponse(DriverProfile profile) {
         return DriverCurrentRideResponse.builder()
                 .rideId(profile.getCurrentRideId())
@@ -248,6 +297,51 @@ public class DriverProfileService {
                 .destinationAddress(profile.getCurrentRideDestination())
                 .requestedAt(profile.getCurrentRideRequestedAt())
                 .driverAvailabilityStatus(profile.getAvailabilityStatus().name())
+                .currentLocation(toLocationPayload(profile))
+                .build();
+    }
+
+    private void publishRideAssigned(String rideId, String driverId) {
+        kafkaTemplate.send(
+                RIDE_ASSIGNED_TOPIC,
+                RideAssignedEvent.builder()
+                        .eventId(UUID.randomUUID().toString())
+                        .type(RideAssignedEvent.EVENT_TYPE)
+                        .rideId(rideId)
+                        .driverId(driverId)
+                        .timestamp(Instant.now().toString())
+                        .build());
+    }
+
+    private void publishDriverStatusChanged(DriverProfile profile, String rideId, String rideStatus) {
+        kafkaTemplate.send(
+                DRIVER_STATUS_CHANGED_TOPIC,
+                DriverStatusEvent.builder()
+                        .eventId(UUID.randomUUID().toString())
+                        .type(DriverStatusEvent.EVENT_TYPE)
+                        .driverId(profile.getExternalUserId())
+                        .availabilityStatus(profile.getAvailabilityStatus().name())
+                        .activeForBooking(isActiveForBooking(profile))
+                        .rideId(rideId)
+                        .rideStatus(rideStatus)
+                        .currentLocation(toLocationPayload(profile))
+                        .timestamp(Instant.now().toString())
+                        .build());
+    }
+
+    private boolean isActiveForBooking(DriverProfile profile) {
+        return profile.getVerificationStatus() == DriverVerificationStatus.APPROVED
+                && profile.getAvailabilityStatus() != DriverAvailabilityStatus.OFFLINE;
+    }
+
+    private String currentRideStatusName(DriverProfile profile) {
+        return profile.getCurrentRideStatus() == null ? null : profile.getCurrentRideStatus().name();
+    }
+
+    private DriverLocationPayload toLocationPayload(DriverProfile profile) {
+        return DriverLocationPayload.builder()
+                .lat(profile.getCurrentLatitude())
+                .lng(profile.getCurrentLongitude())
                 .build();
     }
 }
