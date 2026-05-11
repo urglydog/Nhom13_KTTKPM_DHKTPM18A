@@ -1,8 +1,11 @@
 package iuh.fit.payment_service.controller;
 
 import iuh.fit.common.dto.response.ApiResponse;
+import iuh.fit.payment_service.dto.momo.MoMoIpnRequest;
+import iuh.fit.payment_service.dto.momo.MoMoIpnResult;
 import iuh.fit.payment_service.dto.request.ChargePaymentRequest;
 import iuh.fit.payment_service.dto.response.PaymentResponse;
+import iuh.fit.payment_service.service.MoMoPaymentService;
 import iuh.fit.payment_service.service.PaymentSagaService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -24,11 +27,12 @@ import org.springframework.web.bind.annotation.*;
 public class PaymentController {
 
     private final PaymentSagaService paymentSagaService;
+    private final MoMoPaymentService moMoPaymentService;
 
     @PostMapping("/charge")
     @Operation(
             summary = "Charge payment",
-            description = "Initiates a payment charge for a ride. Supports idempotency via X-Idempotency-Key header or request body."
+            description = "Initiates a payment charge for a booking. Supports idempotency via X-Idempotency-Key header or request body."
     )
     @ApiResponses(value = {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Payment processed successfully"),
@@ -41,8 +45,8 @@ public class PaymentController {
             @Parameter(description = "Idempotency key to prevent duplicate charges")
             @RequestHeader(value = "X-Idempotency-Key", required = false) String headerIdempotencyKey
     ) {
-        log.info("[Controller] POST /api/payments/charge - rideId={}, customerId={}, amount={}, headerIdemKey={}",
-                request.getRideId(), request.getCustomerId(), request.getAmount(), headerIdempotencyKey);
+        log.info("[Controller] POST /api/payments/charge - bookingId={}, customerId={}, amount={}, headerIdemKey={}",
+                request.getBookingId(), request.getCustomerId(), request.getAmount(), headerIdempotencyKey);
 
         if (headerIdempotencyKey != null && !headerIdempotencyKey.isBlank()
                 && (request.getIdempotencyKey() == null || request.getIdempotencyKey().isBlank())) {
@@ -92,21 +96,60 @@ public class PaymentController {
                 .build());
     }
 
-    @GetMapping("/ride/{rideId}")
-    @Operation(summary = "Get payment by ride ID")
+    @GetMapping("/booking/{bookingId}")
+    @Operation(summary = "Get payment by booking ID")
     @ApiResponses(value = {
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "Payment found"),
             @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "404", description = "Payment not found")
     })
-    public ResponseEntity<ApiResponse<PaymentResponse>> getPaymentByRideId(
-            @Parameter(description = "Ride ID", example = "r123")
-            @PathVariable String rideId
+    public ResponseEntity<ApiResponse<PaymentResponse>> getPaymentByBookingId(
+            @Parameter(description = "Booking ID", example = "b_123")
+            @PathVariable String bookingId
     ) {
-        log.info("[Controller] GET /api/payments/ride/{}", rideId);
-        PaymentResponse response = paymentSagaService.getPaymentByRideId(rideId);
+        log.info("[Controller] GET /api/payments/booking/{}", bookingId);
+        PaymentResponse response = paymentSagaService.getPaymentByBookingId(bookingId);
         return ResponseEntity.ok(ApiResponse.<PaymentResponse>builder()
                 .message("Payment retrieved successfully")
                 .result(response)
                 .build());
+    }
+
+    @PostMapping("/momo/ipn")
+    @Operation(
+            summary = "MoMo IPN (Instant Payment Notification) webhook",
+            description = "Receives payment confirmation callbacks from MoMo after customer completes payment"
+    )
+    @ApiResponses(value = {
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "200", description = "IPN processed"),
+            @io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "400", description = "Invalid signature")
+    })
+    public ResponseEntity<java.util.Map<String, Object>> handleMoMoIpn(
+            @RequestBody MoMoIpnRequest ipnRequest
+    ) {
+        log.info("[Controller] POST /api/payments/momo/ipn - orderId={}, resultCode={}, amount={}",
+                ipnRequest.getOrderId(), ipnRequest.getResultCode(), ipnRequest.getAmount());
+
+        MoMoIpnResult result = moMoPaymentService.processIpn(ipnRequest);
+
+        java.util.Map<String, Object> response = new java.util.LinkedHashMap<>();
+        response.put("partnerCode", result.getResultCode() != null ? ipnRequest.getPartnerCode() : "");
+        response.put("orderId", result.getOrderId());
+        response.put("requestId", ipnRequest.getRequestId());
+        response.put("resultCode", result.getResultCode());
+        response.put("message", result.getMessage());
+
+        if (!result.isSuccess()) {
+            return ResponseEntity.ok(response);
+        }
+
+        try {
+            paymentSagaService.completePaymentFromMoMoIpn(result);
+        } catch (Exception e) {
+            log.error("[Controller] Failed to complete MoMo payment - orderId={}", ipnRequest.getOrderId(), e);
+            response.put("resultCode", 99);
+            response.put("message", "Internal error: " + e.getMessage());
+        }
+
+        return ResponseEntity.ok(response);
     }
 }

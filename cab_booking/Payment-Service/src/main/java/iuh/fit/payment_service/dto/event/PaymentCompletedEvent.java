@@ -1,9 +1,9 @@
 package iuh.fit.payment_service.dto.event;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 
 @Data
 @NoArgsConstructor
@@ -11,64 +11,29 @@ import java.time.Instant;
 @Builder
 public class PaymentCompletedEvent {
 
-    public static final String EVENT_TYPE = "PAYMENT_COMPLETED";
-    public static final String SCHEMA_VERSION = "1.0.0";
+    @JsonProperty("eventType")
+    private String eventType;
 
-    private String eventId;
-    private String type;
-    private String transactionId;
-    private String rideId;
-    private String customerId;
-    private BigDecimal amount;
-    private String currency;
+    @JsonProperty("bookingId")
+    private String bookingId;
+
+    @JsonProperty("status")
     private String status;
-    private String gatewayTransactionId;
-    private String paymentMethod;
-    private Instant paidAt;
-    private String schemaVersion;
 
-    public String getEventId() {
-        if (eventId == null || eventId.isBlank()) {
-            return java.util.UUID.randomUUID().toString();
-        }
-        return eventId;
-    }
-
-    public String getType() {
-        if (type == null || type.isBlank()) {
-            return EVENT_TYPE;
-        }
-        return type;
-    }
-
-    public String getSchemaVersion() {
-        if (schemaVersion == null || schemaVersion.isBlank()) {
-            return SCHEMA_VERSION;
-        }
-        return schemaVersion;
-    }
+    @JsonProperty("amount")
+    private BigDecimal amount;
 
     public static PaymentCompletedEvent fromTransaction(
-            String transactionId,
-            String rideId,
-            String customerId,
+            String bookingId,
             BigDecimal amount,
             String currency,
             String gatewayTransactionId,
             String paymentMethod) {
         return PaymentCompletedEvent.builder()
-                .eventId(java.util.UUID.randomUUID().toString())
-                .type(EVENT_TYPE)
-                .transactionId(transactionId)
-                .rideId(rideId)
-                .customerId(customerId)
+                .eventType("PAYMENT_COMPLETED")
+                .bookingId(bookingId)
+                .status("SUCCESS")
                 .amount(amount)
-                .currency(currency)
-                .status("success")
-                .gatewayTransactionId(gatewayTransactionId)
-                .paymentMethod(paymentMethod)
-                .paidAt(Instant.now())
-                .schemaVersion(SCHEMA_VERSION)
                 .build();
     }
 }

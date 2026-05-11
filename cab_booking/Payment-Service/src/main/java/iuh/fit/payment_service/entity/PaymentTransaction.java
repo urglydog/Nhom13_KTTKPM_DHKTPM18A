@@ -13,7 +13,7 @@ import java.util.UUID;
 @Entity
 @Table(name = "payment_transactions", indexes = {
         @Index(name = "idx_txn_id", columnList = "transactionId", unique = true),
-        @Index(name = "idx_ride_id", columnList = "rideId"),
+        @Index(name = "idx_booking_id", columnList = "bookingId"),
         @Index(name = "idx_customer_id", columnList = "customerId"),
         @Index(name = "idx_idempotency_key", columnList = "idempotencyKey", unique = true),
         @Index(name = "idx_status", columnList = "status"),
@@ -36,7 +36,7 @@ public class PaymentTransaction {
     private String transactionId;
 
     @Column(nullable = false, length = 64)
-    private String rideId;
+    private String bookingId;
 
     @Column(nullable = false, length = 64)
     private String customerId;

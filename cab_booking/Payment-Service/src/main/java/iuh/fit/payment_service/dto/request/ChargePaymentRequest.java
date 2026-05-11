@@ -12,8 +12,8 @@ import java.math.BigDecimal;
 @Builder
 public class ChargePaymentRequest {
 
-    @NotBlank(message = "Ride ID is required")
-    private String rideId;
+    @NotBlank(message = "Booking ID is required")
+    private String bookingId;
 
     @NotBlank(message = "Customer ID is required")
     private String customerId;

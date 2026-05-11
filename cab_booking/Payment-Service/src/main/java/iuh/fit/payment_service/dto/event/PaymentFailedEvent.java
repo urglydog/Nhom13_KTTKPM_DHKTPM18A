@@ -1,9 +1,9 @@
 package iuh.fit.payment_service.dto.event;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 
 import java.math.BigDecimal;
-import java.time.Instant;
 
 @Data
 @NoArgsConstructor
@@ -11,64 +11,29 @@ import java.time.Instant;
 @Builder
 public class PaymentFailedEvent {
 
-    public static final String EVENT_TYPE = "PAYMENT_FAILED";
-    public static final String SCHEMA_VERSION = "1.0.0";
+    @JsonProperty("eventType")
+    private String eventType;
 
-    private String eventId;
-    private String type;
-    private String transactionId;
-    private String rideId;
-    private String customerId;
-    private BigDecimal amount;
-    private String currency;
+    @JsonProperty("bookingId")
+    private String bookingId;
+
+    @JsonProperty("status")
     private String status;
-    private String failureReason;
-    private int retryCount;
-    private Instant failedAt;
-    private String schemaVersion;
 
-    public String getEventId() {
-        if (eventId == null || eventId.isBlank()) {
-            return java.util.UUID.randomUUID().toString();
-        }
-        return eventId;
-    }
-
-    public String getType() {
-        if (type == null || type.isBlank()) {
-            return EVENT_TYPE;
-        }
-        return type;
-    }
-
-    public String getSchemaVersion() {
-        if (schemaVersion == null || schemaVersion.isBlank()) {
-            return SCHEMA_VERSION;
-        }
-        return schemaVersion;
-    }
+    @JsonProperty("reason")
+    private String reason;
 
     public static PaymentFailedEvent fromTransaction(
-            String transactionId,
-            String rideId,
-            String customerId,
+            String bookingId,
             BigDecimal amount,
             String currency,
             String failureReason,
             int retryCount) {
         return PaymentFailedEvent.builder()
-                .eventId(java.util.UUID.randomUUID().toString())
-                .type(EVENT_TYPE)
-                .transactionId(transactionId)
-                .rideId(rideId)
-                .customerId(customerId)
-                .amount(amount)
-                .currency(currency)
-                .status("failed")
-                .failureReason(failureReason)
-                .retryCount(retryCount)
-                .failedAt(Instant.now())
-                .schemaVersion(SCHEMA_VERSION)
+                .eventType("PAYMENT_FAILED")
+                .bookingId(bookingId)
+                .status("FAILED")
+                .reason(failureReason)
                 .build();
     }
 }

@@ -18,13 +18,13 @@ public interface PaymentTransactionRepository extends JpaRepository<PaymentTrans
 
     Optional<PaymentTransaction> findByIdempotencyKey(String idempotencyKey);
 
-    Optional<PaymentTransaction> findByRideId(String rideId);
+    Optional<PaymentTransaction> findByBookingId(String bookingId);
 
     boolean existsByIdempotencyKey(String idempotencyKey);
 
-    @Query("SELECT p FROM PaymentTransaction p WHERE p.rideId = :rideId AND p.status = :status")
-    Optional<PaymentTransaction> findByRideIdAndStatus(
-            @Param("rideId") String rideId,
+    @Query("SELECT p FROM PaymentTransaction p WHERE p.bookingId = :bookingId AND p.status = :status")
+    Optional<PaymentTransaction> findByBookingIdAndStatus(
+            @Param("bookingId") String bookingId,
             @Param("status") PaymentStatus status
     );
 
