@@ -25,6 +25,7 @@ public class PaymentSecurityConfig {
                         .requestMatchers("/internal/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/payments/charge").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/payments/**").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/payments/momo/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .oauth2ResourceServer(oauth2 -> oauth2.disable());

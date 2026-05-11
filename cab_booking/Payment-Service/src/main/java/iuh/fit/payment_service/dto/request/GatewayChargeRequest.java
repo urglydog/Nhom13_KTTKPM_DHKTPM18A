@@ -13,6 +13,7 @@ public class GatewayChargeRequest {
 
     private String transactionId;
     private String customerId;
+    private String bookingId;
     private BigDecimal amount;
     private String currency;
     private PaymentMethod paymentMethod;

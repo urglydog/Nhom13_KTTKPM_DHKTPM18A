@@ -15,7 +15,7 @@ import java.time.Instant;
 public class PaymentResponse {
 
     private String transactionId;
-    private String rideId;
+    private String bookingId;
     private String customerId;
     private BigDecimal amount;
     private String currency;
@@ -28,11 +28,17 @@ public class PaymentResponse {
     private Instant createdAt;
     private Instant updatedAt;
     private String message;
+    private String payUrl;
+    private String qrCodeUrl;
+    private String deeplink;
+    private String deeplinkWallet;
+    private String momoOrderId;
+    private String momoRequestId;
 
     public static PaymentResponse fromEntity(PaymentTransaction entity) {
         return PaymentResponse.builder()
                 .transactionId(entity.getTransactionId())
-                .rideId(entity.getRideId())
+                .bookingId(entity.getBookingId())
                 .customerId(entity.getCustomerId())
                 .amount(entity.getAmount())
                 .currency(entity.getCurrency())

@@ -21,8 +21,9 @@ public class GlobalExceptionHandler {
         log.error("PaymentException: code={}, message={}", exception.getErrorCode().getCode(), exception.getMessage());
         ErrorCode errorCode = exception.getErrorCode();
         ApiResponse<?> response = ApiResponse.builder()
-                .code(errorCode.getCode())
+                .code(errorCode.getHttpStatus())
                 .message(errorCode.getMessage())
+                .errorMessage(errorCode.getCode())
                 .result(exception.getMessage())
                 .build();
         return ResponseEntity.status(errorCode.getHttpStatus()).body(response);
@@ -32,8 +33,9 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<?>> handlingGatewayException(PaymentGatewayException exception) {
         log.error("PaymentGatewayException: gatewayCode={}, message={}", exception.getGatewayCode(), exception.getMessage(), exception);
         ApiResponse<?> response = ApiResponse.builder()
-                .code(ErrorCode.PAYMENT_GATEWAY_ERROR.getCode())
+                .code(HttpStatus.BAD_GATEWAY.value())
                 .message("Payment gateway error: " + exception.getGatewayMessage())
+                .errorMessage(ErrorCode.PAYMENT_GATEWAY_ERROR.getCode())
                 .result(exception.getGatewayCode())
                 .build();
         return ResponseEntity.status(HttpStatus.BAD_GATEWAY).body(response);
@@ -43,8 +45,9 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<?>> handlingIdempotencyConflict(IdempotencyConflictException exception) {
         log.warn("IdempotencyConflict: key={}, existingTxn={}", exception.getIdempotencyKey(), exception.getExistingTransactionId());
         ApiResponse<?> response = ApiResponse.builder()
-                .code(ErrorCode.IDEMPOTENCY_CONFLICT.getCode())
+                .code(HttpStatus.CONFLICT.value())
                 .message(exception.getMessage())
+                .errorMessage(ErrorCode.IDEMPOTENCY_CONFLICT.getCode())
                 .result(exception.getExistingTransactionId())
                 .build();
         return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
@@ -60,8 +63,9 @@ public class GlobalExceptionHandler {
         });
         log.warn("Validation errors: {}", errors);
         ApiResponse<?> response = ApiResponse.builder()
-                .code(ErrorCode.VALIDATION_ERROR.getCode())
+                .code(HttpStatus.BAD_REQUEST.value())
                 .message("Validation failed")
+                .errorMessage(ErrorCode.VALIDATION_ERROR.getCode())
                 .result(errors)
                 .build();
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
@@ -71,8 +75,9 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ApiResponse<?>> handlingRuntimeException(Exception exception) {
         log.error("Unhandled exception", exception);
         ApiResponse<?> response = ApiResponse.builder()
-                .code(ErrorCode.UNCATEGORIZED_ERROR.getCode())
+                .code(HttpStatus.INTERNAL_SERVER_ERROR.value())
                 .message(ErrorCode.UNCATEGORIZED_ERROR.getMessage())
+                .errorMessage(ErrorCode.UNCATEGORIZED_ERROR.getCode())
                 .result(exception.getMessage())
                 .build();
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(response);

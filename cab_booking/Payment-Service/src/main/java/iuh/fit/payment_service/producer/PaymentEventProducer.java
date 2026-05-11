@@ -19,22 +19,22 @@ public class PaymentEventProducer {
     private final KafkaTemplate<String, Object> kafkaTemplate;
 
     public void sendPaymentCompleted(PaymentCompletedEvent event) {
-        log.info("[Producer] Sending payment.completed event - txnId={}, rideId={}, amount={}",
-                event.getTransactionId(), event.getRideId(), event.getAmount());
+        log.info("[Producer] Sending payment.completed - bookingId={}, amount={}",
+                event.getBookingId(), event.getAmount());
 
         CompletableFuture<SendResult<String, Object>> future = kafkaTemplate.send(
                 KafkaConfig.TOPIC_PAYMENT_COMPLETED,
-                event.getTransactionId(),
+                event.getBookingId(),
                 event
         );
 
         future.whenComplete((result, ex) -> {
             if (ex != null) {
-                log.error("[Producer] Failed to send payment.completed - txnId={}: {}",
-                        event.getTransactionId(), ex.getMessage());
+                log.error("[Producer] Failed to send payment.completed - bookingId={}: {}",
+                        event.getBookingId(), ex.getMessage());
             } else {
-                log.info("[Producer] payment.completed sent - txnId={}, partition={}, offset={}",
-                        event.getTransactionId(),
+                log.info("[Producer] payment.completed sent - bookingId={}, partition={}, offset={}",
+                        event.getBookingId(),
                         result.getRecordMetadata().partition(),
                         result.getRecordMetadata().offset());
             }
@@ -42,22 +42,22 @@ public class PaymentEventProducer {
     }
 
     public void sendPaymentFailed(PaymentFailedEvent event) {
-        log.info("[Producer] Sending payment.failed event - txnId={}, rideId={}, reason={}",
-                event.getTransactionId(), event.getRideId(), event.getFailureReason());
+        log.info("[Producer] Sending payment.failed - bookingId={}, reason={}",
+                event.getBookingId(), event.getReason());
 
         CompletableFuture<SendResult<String, Object>> future = kafkaTemplate.send(
                 KafkaConfig.TOPIC_PAYMENT_FAILED,
-                event.getTransactionId(),
+                event.getBookingId(),
                 event
         );
 
         future.whenComplete((result, ex) -> {
             if (ex != null) {
-                log.error("[Producer] Failed to send payment.failed - txnId={}: {}",
-                        event.getTransactionId(), ex.getMessage());
+                log.error("[Producer] Failed to send payment.failed - bookingId={}: {}",
+                        event.getBookingId(), ex.getMessage());
             } else {
-                log.info("[Producer] payment.failed sent - txnId={}, partition={}, offset={}",
-                        event.getTransactionId(),
+                log.info("[Producer] payment.failed sent - bookingId={}, partition={}, offset={}",
+                        event.getBookingId(),
                         result.getRecordMetadata().partition(),
                         result.getRecordMetadata().offset());
             }

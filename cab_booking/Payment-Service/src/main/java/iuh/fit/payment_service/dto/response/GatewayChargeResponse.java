@@ -12,6 +12,7 @@ import java.math.BigDecimal;
 public class GatewayChargeResponse {
 
     private boolean success;
+    private boolean pending;
     private String gatewayTransactionId;
     private String status;
     private String message;
@@ -20,4 +21,10 @@ public class GatewayChargeResponse {
     private String currency;
     private PaymentMethod paymentMethod;
     private String transactionRef;
+    private String payUrl;
+    private String qrCodeUrl;
+    private String deeplink;
+    private String deeplinkWallet;
+    private String momoOrderId;
+    private String momoRequestId;
 }

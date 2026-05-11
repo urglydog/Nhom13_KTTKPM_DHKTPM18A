@@ -1,29 +1,27 @@
 package iuh.fit.payment_service.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import iuh.fit.payment_service.config.KafkaConfig;
 import iuh.fit.payment_service.config.RedisConfig.IdempotencyRedisService;
 import iuh.fit.payment_service.dto.event.PaymentCompletedEvent;
 import iuh.fit.payment_service.dto.event.PaymentFailedEvent;
+import iuh.fit.payment_service.dto.momo.MoMoIpnResult;
 import iuh.fit.payment_service.dto.request.ChargePaymentRequest;
 import iuh.fit.payment_service.dto.request.GatewayChargeRequest;
 import iuh.fit.payment_service.dto.response.GatewayChargeResponse;
 import iuh.fit.payment_service.dto.response.PaymentResponse;
 import iuh.fit.payment_service.entity.PaymentTransaction;
 import iuh.fit.payment_service.enums.PaymentStatus;
+import iuh.fit.payment_service.enums.PaymentMethod;
 import iuh.fit.payment_service.exception.ErrorCode;
 import iuh.fit.payment_service.exception.IdempotencyConflictException;
 import iuh.fit.payment_service.exception.PaymentException;
 import iuh.fit.payment_service.exception.PaymentGatewayException;
+import iuh.fit.payment_service.producer.PaymentEventProducer;
 import iuh.fit.payment_service.repository.PaymentTransactionRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.kafka.core.KafkaTemplate;
-import org.springframework.kafka.support.SendResult;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
-
-import java.util.concurrent.CompletableFuture;
 
 @Service
 @RequiredArgsConstructor
@@ -33,7 +31,8 @@ public class PaymentSagaService {
     private final PaymentTransactionRepository paymentRepository;
     private final IdempotencyRedisService idempotencyRedisService;
     private final MockPaymentGatewayService gatewayService;
-    private final KafkaTemplate<String, Object> kafkaTemplate;
+    private final MoMoPaymentService moMoPaymentService;
+    private final PaymentEventProducer paymentEventProducer;
     private final ObjectMapper objectMapper;
 
     private static final int MAX_RETRY = 3;
@@ -42,8 +41,8 @@ public class PaymentSagaService {
     public PaymentResponse startPaymentSaga(ChargePaymentRequest request) {
         String idempotencyKey = request.getIdempotencyKey();
 
-        log.info("[Saga] Starting payment saga - rideId={}, customerId={}, amount={}, method={}, idempotencyKey={}",
-                request.getRideId(), request.getCustomerId(), request.getAmount(), request.getPaymentMethod(), idempotencyKey);
+        log.info("[Saga] Starting payment saga - bookingId={}, customerId={}, amount={}, method={}, idempotencyKey={}",
+                request.getBookingId(), request.getCustomerId(), request.getAmount(), request.getPaymentMethod(), idempotencyKey);
 
         if (idempotencyKey != null && !idempotencyKey.isBlank()) {
             return handleIdempotency(idempotencyKey, request);
@@ -89,7 +88,7 @@ public class PaymentSagaService {
     private PaymentTransaction createAndSaveTransaction(ChargePaymentRequest request) {
         PaymentTransaction transaction = PaymentTransaction.builder()
                 .transactionId("txn_" + java.util.UUID.randomUUID().toString().replace("-", "").substring(0, 12))
-                .rideId(request.getRideId())
+                .bookingId(request.getBookingId())
                 .customerId(request.getCustomerId())
                 .amount(request.getAmount())
                 .currency(request.getCurrency() != null ? request.getCurrency() : "VND")
@@ -97,7 +96,7 @@ public class PaymentSagaService {
                 .status(PaymentStatus.PENDING)
                 .idempotencyKey(request.getIdempotencyKey())
                 .retryCount(0)
-                .paymentGatewayName("MOCK_GATEWAY")
+                .paymentGatewayName(request.getPaymentMethod() == PaymentMethod.MOMO ? "MOMO" : "MOCK_GATEWAY")
                 .build();
 
         transaction = paymentRepository.save(transaction);
@@ -126,6 +125,22 @@ public class PaymentSagaService {
 
                     publishPaymentCompletedEvent(transaction);
                     return PaymentResponse.fromEntity(transaction, "Payment completed successfully");
+                }
+
+                if (gatewayResponse.isPending()) {
+                    log.info("[Saga] MoMo payment PENDING - txnId={}, awaiting IPN callback",
+                            transaction.getTransactionId());
+                    transaction.setStatus(PaymentStatus.PENDING);
+                    transaction = paymentRepository.save(transaction);
+                    PaymentResponse resp = PaymentResponse.fromEntity(transaction,
+                            "MoMo payment initiated, awaiting customer confirmation");
+                    resp.setPayUrl(gatewayResponse.getPayUrl());
+                    resp.setQrCodeUrl(gatewayResponse.getQrCodeUrl());
+                    resp.setDeeplink(gatewayResponse.getDeeplink());
+                    resp.setDeeplinkWallet(gatewayResponse.getDeeplinkWallet());
+                    resp.setMomoOrderId(gatewayResponse.getMomoOrderId());
+                    resp.setMomoRequestId(gatewayResponse.getMomoRequestId());
+                    return resp;
                 }
 
                 String reason = gatewayResponse.getErrorCode() + ": " + gatewayResponse.getMessage();
@@ -191,12 +206,16 @@ public class PaymentSagaService {
         GatewayChargeRequest gatewayRequest = GatewayChargeRequest.builder()
                 .transactionId(transaction.getTransactionId())
                 .customerId(transaction.getCustomerId())
+                .bookingId(transaction.getBookingId())
                 .amount(transaction.getAmount())
                 .currency(transaction.getCurrency())
                 .paymentMethod(transaction.getPaymentMethod())
-                .description("Payment for ride " + transaction.getRideId())
+                .description("Payment for booking " + transaction.getBookingId())
                 .build();
 
+        if (transaction.getPaymentMethod() == PaymentMethod.MOMO) {
+            return moMoPaymentService.charge(gatewayRequest);
+        }
         return gatewayService.charge(gatewayRequest);
     }
 
@@ -214,32 +233,16 @@ public class PaymentSagaService {
     private void publishPaymentCompletedEvent(PaymentTransaction transaction) {
         try {
             PaymentCompletedEvent event = PaymentCompletedEvent.fromTransaction(
-                    transaction.getTransactionId(),
-                    transaction.getRideId(),
-                    transaction.getCustomerId(),
+                    transaction.getBookingId(),
                     transaction.getAmount(),
                     transaction.getCurrency(),
                     transaction.getGatewayTransactionId(),
                     transaction.getPaymentMethod().name()
             );
 
-            CompletableFuture<SendResult<String, Object>> future = kafkaTemplate.send(
-                    KafkaConfig.TOPIC_PAYMENT_COMPLETED,
-                    transaction.getTransactionId(),
-                    event
-            );
-
-            future.whenComplete((result, ex) -> {
-                if (ex == null) {
-                    log.info("[Saga] Published payment.completed - txnId={}, partition={}, offset={}",
-                            transaction.getTransactionId(),
-                            result.getRecordMetadata().partition(),
-                            result.getRecordMetadata().offset());
-                } else {
-                    log.error("[Saga] Failed to publish payment.completed - txnId={}",
-                            transaction.getTransactionId(), ex);
-                }
-            });
+            paymentEventProducer.sendPaymentCompleted(event);
+            log.info("[Saga] Published payment.completed - txnId={}, bookingId={}",
+                    transaction.getTransactionId(), transaction.getBookingId());
         } catch (Exception e) {
             log.error("[Saga] Error publishing payment.completed event - txnId={}",
                     transaction.getTransactionId(), e);
@@ -249,32 +252,16 @@ public class PaymentSagaService {
     private void publishPaymentFailedEvent(PaymentTransaction transaction) {
         try {
             PaymentFailedEvent event = PaymentFailedEvent.fromTransaction(
-                    transaction.getTransactionId(),
-                    transaction.getRideId(),
-                    transaction.getCustomerId(),
+                    transaction.getBookingId(),
                     transaction.getAmount(),
                     transaction.getCurrency(),
                     transaction.getFailureReason(),
                     transaction.getRetryCount()
             );
 
-            CompletableFuture<SendResult<String, Object>> future = kafkaTemplate.send(
-                    KafkaConfig.TOPIC_PAYMENT_FAILED,
-                    transaction.getTransactionId(),
-                    event
-            );
-
-            future.whenComplete((result, ex) -> {
-                if (ex == null) {
-                    log.info("[Saga] Published payment.failed - txnId={}, partition={}, offset={}",
-                            transaction.getTransactionId(),
-                            result.getRecordMetadata().partition(),
-                            result.getRecordMetadata().offset());
-                } else {
-                    log.error("[Saga] Failed to publish payment.failed - txnId={}",
-                            transaction.getTransactionId(), ex);
-                }
-            });
+            paymentEventProducer.sendPaymentFailed(event);
+            log.info("[Saga] Published payment.failed - txnId={}, bookingId={}",
+                    transaction.getTransactionId(), transaction.getBookingId());
         } catch (Exception e) {
             log.error("[Saga] Error publishing payment.failed event - txnId={}",
                     transaction.getTransactionId(), e);
@@ -291,11 +278,44 @@ public class PaymentSagaService {
     }
 
     @Transactional(readOnly = true)
-    public PaymentResponse getPaymentByRideId(String rideId) {
-        log.debug("[Saga] Fetching payment by rideId={}", rideId);
-        PaymentTransaction transaction = paymentRepository.findByRideId(rideId)
+    public PaymentResponse getPaymentByBookingId(String bookingId) {
+        log.debug("[Saga] Fetching payment by bookingId={}", bookingId);
+        PaymentTransaction transaction = paymentRepository.findByBookingId(bookingId)
                 .orElseThrow(() -> new PaymentException(ErrorCode.PAYMENT_NOT_FOUND,
-                        "Payment not found for ride: " + rideId));
+                        "Payment not found for booking: " + bookingId));
         return PaymentResponse.fromEntity(transaction);
+    }
+
+    @Transactional
+    public void completePaymentFromMoMoIpn(MoMoIpnResult ipnResult) {
+        log.info("[Saga] Processing MoMo IPN completion - orderId={}, transId={}, success={}",
+                ipnResult.getOrderId(), ipnResult.getTransactionId(), ipnResult.isSuccess());
+
+        PaymentTransaction transaction = paymentRepository.findByTransactionId(ipnResult.getOrderId())
+                .orElseThrow(() -> new PaymentException(ErrorCode.PAYMENT_NOT_FOUND,
+                        "Transaction not found: " + ipnResult.getOrderId()));
+
+        if (transaction.getStatus() == PaymentStatus.SUCCESS) {
+            log.info("[Saga] Transaction already SUCCESS - txnId={}", transaction.getTransactionId());
+            return;
+        }
+
+        if (ipnResult.isSuccess()) {
+            transaction.markSuccess(
+                    ipnResult.getTransactionId(),
+                    "MoMo IPN: resultCode=" + ipnResult.getResultCode() + ", message=" + ipnResult.getMessage()
+            );
+            transaction = paymentRepository.save(transaction);
+            log.info("[Saga] MoMo payment SUCCESS from IPN - txnId={}, gatewayTxnId={}",
+                    transaction.getTransactionId(), ipnResult.getTransactionId());
+            publishPaymentCompletedEvent(transaction);
+        } else {
+            String reason = "MoMo resultCode=" + ipnResult.getResultCode() + ": " + ipnResult.getMessage();
+            transaction.markFailed(reason, false);
+            transaction = paymentRepository.save(transaction);
+            log.warn("[Saga] MoMo payment FAILED from IPN - txnId={}, reason={}",
+                    transaction.getTransactionId(), reason);
+            publishPaymentFailedEvent(transaction);
+        }
     }
 }

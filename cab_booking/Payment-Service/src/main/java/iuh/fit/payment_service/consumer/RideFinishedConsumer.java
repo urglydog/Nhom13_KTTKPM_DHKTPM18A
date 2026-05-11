@@ -14,8 +14,6 @@ import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
-import java.time.Instant;
-import java.util.Map;
 
 @Component
 @RequiredArgsConstructor
@@ -30,20 +28,17 @@ public class RideFinishedConsumer {
             containerFactory = "kafkaListenerContainerFactory"
     )
     public void consumeRideFinishedEvent(
-            @Payload Map<String, Object> event,
+            @Payload RideFinishedEvent event,
             @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
             @Header(KafkaHeaders.OFFSET) long offset,
             @Header(KafkaHeaders.RECEIVED_KEY) String key,
             Acknowledgment acknowledgment) {
 
-        log.info("[Consumer] Received ride.finished event - key={}, partition={}, offset={}", key, partition, offset);
+        log.info("[Consumer] Received ride.finished - key={}, partition={}, offset={}, eventType={}, bookingId={}, finalFare={}",
+                key, partition, offset, event.getEventType(), event.getBookingId(), event.getFinalFare());
 
         try {
-            RideFinishedEvent rideEvent = mapToRideFinishedEvent(event);
-            log.info("[Consumer] Parsed ride.finished - eventId={}, rideId={}, amount={}, customerId={}",
-                    rideEvent.getEventId(), rideEvent.getRideId(), rideEvent.getFinalAmount(), rideEvent.getCustomerId());
-
-            processPaymentFromRideFinished(rideEvent);
+            processPaymentFromRideFinished(event);
             acknowledgment.acknowledge();
             log.info("[Consumer] Successfully processed ride.finished - key={}", key);
         } catch (Exception e) {
@@ -52,30 +47,8 @@ public class RideFinishedConsumer {
         }
     }
 
-    private RideFinishedEvent mapToRideFinishedEvent(Map<String, Object> raw) {
-        return RideFinishedEvent.builder()
-                .eventId(getString(raw, "eventId"))
-                .type(getString(raw, "type"))
-                .rideId(getString(raw, "rideId"))
-                .customerId(getString(raw, "customerId"))
-                .driverId(getString(raw, "driverId"))
-                .totalAmount(getBigDecimal(raw, "totalAmount"))
-                .baseFare(getBigDecimal(raw, "baseFare"))
-                .distanceKm(getBigDecimal(raw, "distanceKm"))
-                .durationMinutes(getBigDecimal(raw, "durationMinutes"))
-                .surgeMultiplier(getBigDecimal(raw, "surgeMultiplier"))
-                .discountAmount(getBigDecimal(raw, "discountAmount"))
-                .finalAmount(getBigDecimal(raw, "finalAmount"))
-                .currency(getString(raw, "currency"))
-                .paymentMethod(getString(raw, "paymentMethod"))
-                .bookingId(getString(raw, "bookingId"))
-                .completedAt(getInstant(raw, "completedAt"))
-                .schemaVersion(getString(raw, "schemaVersion"))
-                .build();
-    }
-
     private void processPaymentFromRideFinished(RideFinishedEvent event) {
-        log.info("[Consumer] Initiating automatic payment for rideId={}", event.getRideId());
+        log.info("[Consumer] Initiating automatic payment for bookingId={}", event.getBookingId());
 
         PaymentMethod method = PaymentMethod.CASH;
         if (event.getPaymentMethod() != null) {
@@ -86,54 +59,27 @@ public class RideFinishedConsumer {
             }
         }
 
-        BigDecimal amount = event.getFinalAmount() != null ? event.getFinalAmount() : event.getTotalAmount();
-
+        BigDecimal amount = event.getFinalFare();
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            log.warn("[Consumer] Skipping payment - invalid amount {} for rideId={}", amount, event.getRideId());
+            log.warn("[Consumer] Skipping payment - invalid finalFare {} for bookingId={}", amount, event.getBookingId());
             return;
         }
 
         ChargePaymentRequest chargeRequest = ChargePaymentRequest.builder()
-                .rideId(event.getRideId())
+                .bookingId(event.getBookingId())
                 .customerId(event.getCustomerId())
                 .amount(amount)
-                .currency(event.getCurrency() != null ? event.getCurrency() : "VND")
+                .currency("VND")
                 .paymentMethod(method)
-                .description("Auto-payment for ride " + event.getRideId())
-                .idempotencyKey("ride-finished-" + event.getRideId())
+                .description("Auto-payment for booking " + event.getBookingId())
+                .idempotencyKey("ride-finished-" + event.getBookingId())
                 .build();
 
         try {
             paymentSagaService.startPaymentSaga(chargeRequest);
-            log.info("[Consumer] Payment saga triggered successfully for rideId={}", event.getRideId());
+            log.info("[Consumer] Payment saga triggered successfully for bookingId={}", event.getBookingId());
         } catch (Exception e) {
-            log.error("[Consumer] Failed to trigger payment saga for rideId={}", event.getRideId(), e);
+            log.error("[Consumer] Failed to trigger payment saga for bookingId={}", event.getBookingId(), e);
         }
-    }
-
-    private String getString(Map<String, Object> map, String key) {
-        Object value = map.get(key);
-        return value != null ? value.toString() : null;
-    }
-
-    private BigDecimal getBigDecimal(Map<String, Object> map, String key) {
-        Object value = map.get(key);
-        if (value == null) return null;
-        if (value instanceof BigDecimal) return (BigDecimal) value;
-        if (value instanceof Number) return BigDecimal.valueOf(((Number) value).doubleValue());
-        if (value instanceof String) {
-            try { return new BigDecimal((String) value); } catch (NumberFormatException e) { return null; }
-        }
-        return null;
-    }
-
-    private Instant getInstant(Map<String, Object> map, String key) {
-        Object value = map.get(key);
-        if (value == null) return null;
-        if (value instanceof String) {
-            try { return Instant.parse((String) value); } catch (Exception e) { return null; }
-        }
-        if (value instanceof Number) return Instant.ofEpochMilli(((Number) value).longValue());
-        return null;
     }
 }

@@ -18,6 +18,10 @@ public enum ErrorCode {
     INSUFFICIENT_AMOUNT("PAYMENT_009", "Insufficient amount", 400),
     PAYMENT_RETRY_EXHAUSTED("PAYMENT_010", "Payment retry exhausted", 500),
     GATEWAY_DECLINED("PAYMENT_011", "Payment declined by gateway", 400),
+    MOMO_SIGNATURE_INVALID("PAYMENT_012", "MoMo signature verification failed", 400),
+    MOMO_ORDER_NOT_FOUND("PAYMENT_013", "MoMo order not found", 404),
+    MOMO_DUPLICATE_REQUEST("PAYMENT_014", "Duplicate MoMo request", 409),
+    MOMO_GATEWAY_ERROR("PAYMENT_015", "MoMo gateway error", 502),
     UNCATEGORIZED_ERROR("PAYMENT_999", "Uncategorized error", 500);
 
     private final String code;
