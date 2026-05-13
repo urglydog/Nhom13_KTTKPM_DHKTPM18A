@@ -14,7 +14,23 @@ public enum ErrorCode {
     // Common errors
     UNCATEGORIZED_EXCEPTION(500, "Uncategorized error", HttpStatus.INTERNAL_SERVER_ERROR),
     INVALID_KEY(400, "Invalid key", HttpStatus.BAD_REQUEST),
-    VALIDATION_ERROR(400, "Validation failed", HttpStatus.BAD_REQUEST);
+    VALIDATION_ERROR(400, "Validation failed", HttpStatus.BAD_REQUEST),
+    USER_PROFILE_NOT_FOUND(404, "User profile not found", HttpStatus.NOT_FOUND),
+    USER_DEVICE_NOT_FOUND(404, "User device not found", HttpStatus.NOT_FOUND),
+    USER_DEVICE_DUPLICATED(409, "User device already exists", HttpStatus.CONFLICT),
+    EMAIL_ALREADY_EXISTS(409, "Email already exists", HttpStatus.CONFLICT),
+    INVALID_CREDENTIALS(401, "Invalid email or password", HttpStatus.UNAUTHORIZED),
+    REFRESH_TOKEN_INVALID(401, "Refresh token is invalid", HttpStatus.UNAUTHORIZED),
+    REFRESH_TOKEN_EXPIRED(401, "Refresh token has expired", HttpStatus.UNAUTHORIZED),
+    AUTH_USER_NOT_FOUND(404, "Auth user not found", HttpStatus.NOT_FOUND),
+    AUTH_SESSION_NOT_FOUND(404, "Auth session not found", HttpStatus.NOT_FOUND),
+    ACCOUNT_DISABLED(403, "Account is disabled", HttpStatus.FORBIDDEN),
+    ACCOUNT_PENDING_DELETION(403, "Account is pending deletion", HttpStatus.FORBIDDEN),
+    ACCOUNT_RESTORE_WINDOW_EXPIRED(410, "Account restore window has expired", HttpStatus.GONE),
+    EMAIL_DELIVERY_FAILED(502, "Email delivery failed", HttpStatus.BAD_GATEWAY),
+    REGISTRATION_EMAIL_NOT_VERIFIED(400, "Email is not verified for registration", HttpStatus.BAD_REQUEST),
+    REGISTRATION_OTP_INVALID(400, "Registration OTP is invalid", HttpStatus.BAD_REQUEST),
+    REGISTRATION_OTP_EXPIRED(400, "Registration OTP has expired", HttpStatus.BAD_REQUEST);
 
     int code;
     String message;

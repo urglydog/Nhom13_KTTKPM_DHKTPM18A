@@ -5,14 +5,30 @@ spring:
   application:
     name: auth-service
   datasource:
-    url: ${AUTH_DB_JDBC_URL}
-    username: ${AUTH_DB_USER}
-    password: ${AUTH_DB_PASSWORD}
+    url: ${AUTH_DB_JDBC_URL:jdbc:postgresql://localhost:5433/auth_db}
+    username: ${AUTH_DB_USER:admin}
+    password: ${AUTH_DB_PASSWORD:adminpassword}
     driver-class-name: org.postgresql.Driver
   jpa:
     hibernate:
       ddl-auto: update
     show-sql: true
+
+app:
+  security:
+    public-endpoints: >
+      /auth/register/request-otp,
+      /auth/register/verify-otp,
+      /auth/register,
+      /auth/register/email,
+      /auth/login,
+      /auth/refresh,
+      /auth/logout,
+      /auth/verify,
+      /auth/token,
+      /auth/password/forgot/request-otp,
+      /auth/password/forgot/reset,
+      /internal/auth/users/**
 
 # ĐƯA EUREKA RA NGOÀI, KHÔNG NẰM TRONG SPRING
 eureka:
@@ -24,3 +40,18 @@ eureka:
   instance:
     prefer-ip-address: true
     instance-id: ${spring.application.name}:${server.port}:${random.value}
+
+auth:
+  jwt:
+    access-token-minutes: ${AUTH_ACCESS_TOKEN_MINUTES:120}
+    refresh-token-days: ${AUTH_REFRESH_TOKEN_DAYS:30}
+  registration:
+    otp-minutes: ${AUTH_REGISTRATION_OTP_MINUTES:10}
+    otp-length: ${AUTH_REGISTRATION_OTP_LENGTH:6}
+  password-reset:
+    otp-minutes: ${AUTH_PASSWORD_RESET_OTP_MINUTES:10}
+    otp-length: ${AUTH_PASSWORD_RESET_OTP_LENGTH:6}
+
+integration:
+  email-service:
+    url: ${EMAIL_SERVICE_URL:http://email-service:8087}

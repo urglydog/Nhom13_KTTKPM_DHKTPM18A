@@ -34,16 +34,25 @@ spring:
                 key-resolver: "#{@ipKeyResolver}"
 
         # route-level RequestRateLimiter
-        - id: eta-service
-          uri: http://eta-service:8082
+        - id: notification-service
+          uri: lb://notification-service
           predicates:
-            - Path=/api/eta/**
-          filters:
-            - name: RequestRateLimiter
-              args:
-                redis-rate-limiter.replenishRate: 5
-                redis-rate-limiter.burstCapacity: 10
-                key-resolver: "#{@ipKeyResolver}"
+            - Path=/api/notifications/**
+
+        - id: user-service
+          uri: lb://user-service
+          predicates:
+            - Path=/api/users/**
+
+        - id: driver-service
+          uri: lb://driver-service
+          predicates:
+            - Path=/api/drivers/**
+
+        - id: review-service
+          uri: lb://review-service
+          predicates:
+            - Path=/api/reviews/**
 
       default-filters:
         - name: Retry
