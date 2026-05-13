@@ -25,11 +25,11 @@ services:
       dockerfile: ./ride-service/Dockerfile
     container_name: cab-ride-service
     ports:
-      - "${RIDE_SERVICE_PORT}:8089"
+      - "${RIDE_SERVICE_PORT}:8085"
     environment:
       - EUREKA_SERVER_URL=${EUREKA_DEFAULT_ZONE}
       - KAFKA_URL=${KAFKA_BOOTSTRAP_SERVERS}
-      - POSTGRES_URL=${RIDE_DB_JDBC_URL}
+      - POSTGRES_URL=jdbc:postgresql://ride-db:5432/${RIDE_DB_NAME}
       - POSTGRES_USER=${RIDE_DB_USER}
       - POSTGRES_PASSWORD=${RIDE_DB_PASSWORD}
       - REDIS_HOST=${REDIS_HOST}
