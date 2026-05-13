@@ -12,7 +12,7 @@ include:
   - review-service/docker-compose.yaml
   - booking-service/docker-compose.yaml
   - Pricing-Service/docker-compose.yaml
-  # - Payment-Service/docker-compose.yaml
+  - Payment-Service/docker-compose.yaml
 
 services:
   redis:
