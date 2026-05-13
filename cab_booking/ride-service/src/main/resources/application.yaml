@@ -1,5 +1,5 @@
 server:
-  port: 8089
+  port: 8085
 
 spring:
   application:
@@ -7,9 +7,9 @@ spring:
 
   # ── Database ──────────────────────────────────────────────────────────────
   datasource:
-    url: ${POSTGRES_URL:jdbc:postgresql://localhost:5432/ride_db}
-    username: ${POSTGRES_USER:postgres}
-    password: ${POSTGRES_PASSWORD:password}
+    url: ${POSTGRES_URL:${RIDE_DB_JDBC_URL:jdbc:postgresql://ride-db:5432/ride_db}}
+    username: ${POSTGRES_USER:${RIDE_DB_USER:postgres}}
+    password: ${POSTGRES_PASSWORD:${RIDE_DB_PASSWORD:password}}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -29,7 +29,7 @@ spring:
 
   # ── Kafka ──────────────────────────────────────────────────────────────────
   kafka:
-    bootstrap-servers: ${KAFKA_URL:localhost:9092}
+    bootstrap-servers: ${KAFKA_URL:${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}}
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
@@ -47,7 +47,7 @@ eureka:
   client:
     enabled: true
     serviceUrl:
-      defaultZone: ${EUREKA_SERVER_URL:http://localhost:8761/eureka/}
+      defaultZone: ${EUREKA_SERVER_URL:${EUREKA_DEFAULT_ZONE:http://localhost:8761/eureka/}}
     register-with-eureka: true
     fetch-registry: true
   instance:
