@@ -35,7 +35,7 @@ public class RideFinishedConsumer {
             Acknowledgment acknowledgment) {
 
         log.info("[Consumer] Received ride.finished - key={}, partition={}, offset={}, eventType={}, rideId={}, finalFare={}",
-                key, partition, offset, event.getEventType(), event.getRideId(), event.getFinalFare());
+            key, partition, offset, event.getEventType(), event.getRideId(), event.getFinalFare());
 
         try {
             processPaymentFromRideFinished(event);
@@ -48,7 +48,8 @@ public class RideFinishedConsumer {
     }
 
     private void processPaymentFromRideFinished(RideFinishedEvent event) {
-        log.info("[Consumer] Initiating automatic payment for rideId={}", event.getRideId());
+        String rideId = event.getRideId();
+        log.info("[Consumer] Initiating automatic payment for rideId={}", rideId);
 
         PaymentMethod method = PaymentMethod.CASH;
         if (event.getPaymentMethod() != null) {
@@ -61,25 +62,25 @@ public class RideFinishedConsumer {
 
         BigDecimal amount = event.getFinalFare();
         if (amount == null || amount.compareTo(BigDecimal.ZERO) <= 0) {
-            log.warn("[Consumer] Skipping payment - invalid finalFare {} for rideId={}", amount, event.getRideId());
+            log.warn("[Consumer] Skipping payment - invalid finalFare {} for rideId={}", amount, rideId);
             return;
         }
 
         ChargePaymentRequest chargeRequest = ChargePaymentRequest.builder()
-                .bookingId(event.getRideId())
+            .bookingId(rideId)
                 .customerId(event.getCustomerId())
                 .amount(amount)
                 .currency("VND")
                 .paymentMethod(method)
-                .description("Auto-payment for ride " + event.getRideId())
-                .idempotencyKey("ride-finished-" + event.getRideId())
+            .description("Auto-payment for ride " + rideId)
+            .idempotencyKey("ride-finished-" + rideId)
                 .build();
 
         try {
             paymentSagaService.startPaymentSaga(chargeRequest);
-            log.info("[Consumer] Payment saga triggered successfully for rideId={}", event.getRideId());
+            log.info("[Consumer] Payment saga triggered successfully for rideId={}", rideId);
         } catch (Exception e) {
-            log.error("[Consumer] Failed to trigger payment saga for rideId={}", event.getRideId(), e);
+            log.error("[Consumer] Failed to trigger payment saga for rideId={}", rideId, e);
         }
     }
 }

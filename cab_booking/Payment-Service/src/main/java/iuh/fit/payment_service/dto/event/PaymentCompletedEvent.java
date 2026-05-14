@@ -35,7 +35,7 @@ public class PaymentCompletedEvent {
     private String timestamp;
 
     public static PaymentCompletedEvent fromTransaction(
-            String bookingId,
+            String rideId,
             BigDecimal amount,
             String currency,
             String gatewayTransactionId,
@@ -44,8 +44,8 @@ public class PaymentCompletedEvent {
                 .eventId(UUID.randomUUID().toString())
                 .type("PaymentCompleted")
                 .eventType("PAYMENT_COMPLETED")
-                .rideId(bookingId)
-                .bookingId(bookingId)
+                .rideId(rideId)
+                .bookingId(rideId)
                 .amount(amount)
                 .timestamp(Instant.now().toString())
                 .build();

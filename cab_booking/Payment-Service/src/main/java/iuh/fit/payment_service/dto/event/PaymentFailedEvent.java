@@ -38,7 +38,7 @@ public class PaymentFailedEvent {
     private String timestamp;
 
     public static PaymentFailedEvent fromTransaction(
-            String bookingId,
+            String rideId,
             BigDecimal amount,
             String currency,
             String failureReason,
@@ -47,8 +47,8 @@ public class PaymentFailedEvent {
                 .eventId(UUID.randomUUID().toString())
                 .type("PaymentFailed")
                 .eventType("PAYMENT_FAILED")
-                .rideId(bookingId)
-                .bookingId(bookingId)
+                .rideId(rideId)
+                .bookingId(rideId)
                 .status("FAILED")
                 .reason(failureReason)
                 .timestamp(Instant.now().toString())
