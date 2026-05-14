@@ -4,6 +4,8 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import lombok.*;
 
 import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.UUID;
 
 @Data
 @NoArgsConstructor
@@ -11,8 +13,17 @@ import java.math.BigDecimal;
 @Builder
 public class PaymentFailedEvent {
 
+    @JsonProperty("eventId")
+    private String eventId;
+
+    @JsonProperty("type")
+    private String type;
+
     @JsonProperty("eventType")
     private String eventType;
+
+    @JsonProperty("rideId")
+    private String rideId;
 
     @JsonProperty("bookingId")
     private String bookingId;
@@ -23,17 +34,24 @@ public class PaymentFailedEvent {
     @JsonProperty("reason")
     private String reason;
 
+    @JsonProperty("timestamp")
+    private String timestamp;
+
     public static PaymentFailedEvent fromTransaction(
-            String bookingId,
+            String rideId,
             BigDecimal amount,
             String currency,
             String failureReason,
             int retryCount) {
         return PaymentFailedEvent.builder()
+                .eventId(UUID.randomUUID().toString())
+                .type("PaymentFailed")
                 .eventType("PAYMENT_FAILED")
-                .bookingId(bookingId)
+                .rideId(rideId)
+                .bookingId(rideId)
                 .status("FAILED")
                 .reason(failureReason)
+                .timestamp(Instant.now().toString())
                 .build();
     }
 }
