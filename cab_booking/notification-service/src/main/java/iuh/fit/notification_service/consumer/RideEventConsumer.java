@@ -8,6 +8,7 @@ import org.springframework.kafka.support.KafkaHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.Map;
 
 @Component
@@ -15,13 +16,14 @@ import java.util.Map;
 @Slf4j
 public class RideEventConsumer {
     private final NotificationService notificationService;
+    private final ObjectMapper objectMapper;
 
     @KafkaListener(topics = {"ride.created", "ride.assigned", "ride.finished", "ride.arrived", "ride.started", "booking-events", "pricing.surge.updated"}, groupId = "notification-group")
-    public void consumeRideEvents(Map<String, Object> event, @Header(KafkaHeaders.RECEIVED_TOPIC) String topic) {
-        // Only log essential info
-        log.info("Consumed event from topic {}: {}", topic, event.getOrDefault("type", event.getOrDefault("eventType", topic)));
+    public void consumeRideEvents(String message, @Header(KafkaHeaders.RECEIVED_TOPIC) String topic) {
+        log.info("Consumed raw event from topic {}: {}", topic, message);
         
         try {
+            Map<String, Object> event = objectMapper.readValue(message, Map.class);
             // Safe extraction with fallback to different field names
             String rideId = event.containsKey("rideId") ? String.valueOf(event.get("rideId")) : null;
             String customerId = event.containsKey("customerId") ? String.valueOf(event.get("customerId")) : null;
@@ -32,7 +34,7 @@ public class RideEventConsumer {
             }
             
             String title = "Ride Update";
-            String message = "";
+            String notificationMessage = "";
             
             // Get event type from either 'type' or 'eventType' field
             String type = event.containsKey("type") ? String.valueOf(event.get("type")) : 
@@ -40,23 +42,23 @@ public class RideEventConsumer {
 
             if ("booking-events".equals(topic) || "ride.arrived".equals(topic) || "ride.started".equals(topic)) {
                 if ("DriverArrived".equals(type) || "RIDE_ARRIVED".equals(type) || "ride.arrived".equals(topic)) {
-                    message = "Your driver has arrived at the pickup location!";
+                    notificationMessage = "Tài xế đã đến điểm đón!";
                 } else if ("RideStarted".equals(type) || "RIDE_STARTED".equals(type) || "ride.started".equals(topic)) {
-                    message = "Your ride has started. Have a safe trip!";
+                    notificationMessage = "Chuyến đi đã bắt đầu. Chúc bạn một chuyến đi an toàn!";
                 } else if ("RideCancelled".equals(type) || "RIDE_CANCELLED".equals(type)) {
-                    message = "Your ride has been cancelled. Reason: " + event.getOrDefault("reason", "Not specified");
+                    notificationMessage = "Your ride has been cancelled. Reason: " + event.getOrDefault("reason", "Not specified");
                 }
             } else {
                 switch (topic) {
                     case "ride.created":
-                        message = String.format("Your ride request %s has been created and is looking for a driver.", rideId);
+                        notificationMessage = "Đang tìm tài xế gần nhất cho bạn...";
                         break;
                     case "ride.assigned":
                         String driverId = String.valueOf(event.getOrDefault("driverId", "unknown"));
-                        message = String.format("Driver %s has been assigned to your ride %s.", driverId, rideId);
+                        notificationMessage = String.format("Đã tìm thấy tài xế! Tài xế đang đến điểm đón của bạn.");
                         break;
                     case "ride.finished":
-                        message = String.format("Your ride %s has been completed. Hope you had a great trip!", rideId);
+                        notificationMessage = "Chuyến đi đã hoàn thành. Cảm ơn bạn đã sử dụng dịch vụ!";
                         title = "Ride Completed";
                         break;
                     case "pricing.surge.updated":
@@ -64,13 +66,13 @@ public class RideEventConsumer {
                         return;
                     default:
                         if (!type.isEmpty()) {
-                            message = "Update for your ride: " + type;
+                            notificationMessage = "Update for your ride: " + type;
                         }
                 }
             }
             
-            if (customerId != null && !message.isEmpty() && !"null".equals(customerId)) {
-                notificationService.sendNotification(customerId, title, message, "PUSH");
+            if (customerId != null && !notificationMessage.isEmpty() && !"null".equals(customerId)) {
+                notificationService.sendNotification(customerId, title, notificationMessage, "PUSH");
             }
         } catch (Exception e) {
             log.error("Error processing Kafka message from topic {}: {}", topic, e.getMessage());
