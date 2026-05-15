@@ -520,6 +520,45 @@
           }
         }
       ]
+    },
+    {
+      "name": "6. Notification & Review",
+      "item": [
+        {
+          "name": "6.1 Get Customer Notifications",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{customerAccessToken}}", "type": "string" }
+              ]
+            },
+            "method": "GET",
+            "url": "{{gatewayUrl}}/api/notifications/user/{{customerUserId}}?page=0&size=10"
+          }
+        },
+        {
+          "name": "6.2 Create Review for Driver",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                { "key": "token", "value": "{{customerAccessToken}}", "type": "string" }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rideId\": \"{{bookingId}}\",\n  \"userId\": \"{{customerUserId}}\",\n  \"driverId\": \"{{driverUserId}}\",\n  \"rating\": 5,\n  \"comment\": \"Dịch vụ tuyệt vời từ Postman Flow!\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": "{{gatewayUrl}}/api/reviews"
+          }
+        }
+      ]
     }
   ],
   "variable": [
@@ -530,6 +569,8 @@
     { "key": "rideServiceUrl", "value": "http://localhost:8085", "type": "string" },
     { "key": "pricingServiceUrl", "value": "http://localhost:8088", "type": "string" },
     { "key": "paymentServiceUrl", "value": "http://localhost:8090", "type": "string" },
+    { "key": "notificationServiceUrl", "value": "http://localhost:8080", "type": "string" },
+    { "key": "reviewServiceUrl", "value": "http://localhost:8080", "type": "string" },
     { "key": "runNonce", "value": "", "type": "string" },
     { "key": "customerEmail", "value": "", "type": "string" },
     { "key": "customerPassword", "value": "12345678", "type": "string" },
