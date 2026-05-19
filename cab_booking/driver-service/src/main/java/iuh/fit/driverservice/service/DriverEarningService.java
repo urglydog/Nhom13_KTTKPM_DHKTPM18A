@@ -20,8 +20,8 @@ import java.math.RoundingMode;
 @Slf4j
 public class DriverEarningService {
 
-    private static final BigDecimal DRIVER_SHARE_PERCENT = new BigDecimal("30.00");
-    private static final BigDecimal DRIVER_SHARE_RATE = new BigDecimal("0.30");
+    private static final BigDecimal DRIVER_SHARE_PERCENT = new BigDecimal("70.00");
+    private static final BigDecimal DRIVER_SHARE_RATE = new BigDecimal("0.70");
 
     private final DriverProfileRepository driverProfileRepository;
     private final DriverEarningRepository driverEarningRepository;

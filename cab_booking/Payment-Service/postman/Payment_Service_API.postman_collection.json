@@ -2,13 +2,13 @@
   "info": {
     "_postman_id": "4b9f3e4b-9c2f-4512-87a1-2d7c58f0c1a1",
     "name": "Payment Service API",
-    "description": "APIs for testing Payment Service with JWT authentication. Includes event smoke test: Payment Service publishes payment.completed and Driver Service consumes it to credit 30% driver earnings. VNPay flow: run charge request, copy/open saved vnpay_pay_url, pay with NCB test card, then check booking/transaction status.",
+    "description": "APIs for testing Payment Service with JWT authentication. Includes event smoke test: Payment Service publishes payment.completed and Driver Service consumes it to credit 70% driver earnings. VNPay flow: run charge request, copy/open saved vnpay_pay_url, pay with NCB test card, then check booking/transaction status.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
       "name": "Event Test - Payment completed -> Driver earnings",
-      "description": "Smoke test nho cho flow khong dung Wallet/Ledger Service: Payment Service publish payment.completed, Driver Service consume event va cong 30% vao totalEarnings. Truoc khi chay, driver_jwt_token phai la token cua tai xe can cong tien; driver_id se duoc lay tu /api/drivers/me/profile.",
+      "description": "Smoke test nho cho flow khong dung Wallet/Ledger Service: Payment Service publish payment.completed, Driver Service consume event va cong 70% vao totalEarnings. Truoc khi chay, driver_jwt_token phai la token cua tai xe can cong tien; driver_id se duoc lay tu /api/drivers/me/profile.",
       "item": [
         {
           "name": "1. Driver - Upsert/Get test profile",
@@ -166,7 +166,7 @@
                 "charge"
               ]
             },
-            "description": "CASH payment success ngay lap tuc, Payment Service tao outbox PAYMENT_COMPLETED va publish Kafka topic payment.completed. Driver Service se consume event nay de cong 30%."
+            "description": "CASH payment success ngay lap tuc, Payment Service tao outbox PAYMENT_COMPLETED va publish Kafka topic payment.completed. Driver Service se consume event nay de cong 70%."
           },
           "event": [
             {
@@ -227,7 +227,7 @@
                 "summary"
               ]
             },
-            "description": "Chay sau step 3 khoang 1-3 giay. Neu totalEarnings tang dung 30% amount thi Driver Service da consume payment.completed thanh cong."
+            "description": "Chay sau step 3 khoang 1-3 giay. Neu totalEarnings tang dung 70% amount thi Driver Service da consume payment.completed thanh cong."
           },
           "event": [
             {
@@ -240,13 +240,13 @@
                   "const result = body.result || body.data || body;",
                   "const before = Number(pm.collectionVariables.get('driver_earnings_before') || 0);",
                   "const amount = Number(pm.collectionVariables.get('payment_event_amount') || 0);",
-                  "const expectedIncrease = amount * 0.30;",
+                  "const expectedIncrease = amount * 0.70;",
                   "const after = Number(result.totalEarnings || 0);",
                   "pm.collectionVariables.set('driver_earnings_after', after.toFixed(2));",
                   "console.log('driver_earnings_before =', before);",
                   "console.log('driver_earnings_after =', after);",
                   "console.log('expected increase =', expectedIncrease);",
-                  "pm.test('Driver earnings increased by 30% of payment amount', function () { pm.expect(after).to.be.closeTo(before + expectedIncrease, 0.01); });"
+                  "pm.test('Driver earnings increased by 70% of payment amount', function () { pm.expect(after).to.be.closeTo(before + expectedIncrease, 0.01); });"
                 ]
               }
             }
