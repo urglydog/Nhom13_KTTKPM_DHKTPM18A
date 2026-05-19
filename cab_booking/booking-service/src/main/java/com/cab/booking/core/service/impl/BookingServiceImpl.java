@@ -193,7 +193,7 @@ public class BookingServiceImpl implements BookingService {
         booking = bookingRepository.save(booking);
         redisTemplate.opsForValue().set("booking:" + bookingId, booking, Duration.ofHours(2));
 
-        log.info("Driver {} rejected booking {}. Booking moved back to MATCHING; matching-service rematches from driver.rejected. Reason={}",
+        log.info("Driver {} rejected booking {}. Booking moved back to MATCHING; matching-service rematches from ride.rejected. Reason={}",
                 driverId,
                 bookingId,
                 reason);

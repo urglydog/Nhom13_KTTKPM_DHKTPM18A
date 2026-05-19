@@ -1,6 +1,5 @@
 package iuh.fit.driverservice;
 
-import iuh.fit.driverservice.dto.event.DriverStatusEvent;
 import iuh.fit.driverservice.dto.event.DriverAcceptedEvent;
 import iuh.fit.driverservice.dto.request.HandleDriverAssignmentRequest;
 import iuh.fit.driverservice.dto.request.UpdateDriverAvailabilityRequest;
@@ -18,6 +17,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.mock.mockito.MockBean;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.kafka.core.KafkaTemplate;
 
@@ -26,7 +26,6 @@ import java.math.BigDecimal;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.when;
-import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.verify;
 
 @SpringBootTest(properties = {
@@ -57,9 +56,13 @@ class DriverServiceApplicationTests {
     @MockBean
     ValueOperations<String, String> valueOperations;
 
+    @MockBean
+    HashOperations<String, Object, Object> hashOperations;
+
     @org.junit.jupiter.api.BeforeEach
     void setUpRedisMock() {
         when(stringRedisTemplate.opsForValue()).thenReturn(valueOperations);
+        when(stringRedisTemplate.opsForHash()).thenReturn(hashOperations);
     }
 
     @Test
@@ -91,18 +94,11 @@ class DriverServiceApplicationTests {
         assertThat(savedProfile.getCurrentLatitude()).isEqualByComparingTo("10.762622");
         assertThat(savedProfile.getCurrentLongitude()).isEqualByComparingTo("106.660172");
 
-        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
-        verify(kafkaTemplate, atLeastOnce()).send(eq("driver.status.changed"), eventCaptor.capture());
-        DriverStatusEvent event = (DriverStatusEvent) eventCaptor.getValue();
-        assertThat(event.getDriverId()).isEqualTo("driver-1");
-        assertThat(event.getAvailabilityStatus()).isEqualTo("ONLINE");
-        assertThat(event.getCurrentLocation().getLat()).isEqualByComparingTo("10.762622");
-        assertThat(event.getCurrentLocation().getLng()).isEqualByComparingTo("106.660172");
-        assertThat(event.getActiveForBooking()).isTrue();
+        verify(valueOperations).set(eq("driver:status:driver-1"), eq("AVAILABLE"));
     }
 
     @Test
-    void handleAssignmentShouldPublishDriverAcceptedForBookingService() {
+    void handleAssignmentShouldPublishRideAcceptedForBookingService() {
         UpsertDriverProfileRequest profileRequest = new UpsertDriverProfileRequest();
         profileRequest.setFullName("Driver Two");
         profileRequest.setEmail("driver2@example.com");
@@ -128,11 +124,11 @@ class DriverServiceApplicationTests {
         driverRideCommandService.handleAssignment("driver-2", assignmentRequest);
 
         ArgumentCaptor<Object> rideAcceptedCaptor = ArgumentCaptor.forClass(Object.class);
-        verify(kafkaTemplate).send(eq("driver.accepted"), eq("2f52e5f8-0f91-4801-98db-ece474d38a13"), rideAcceptedCaptor.capture());
+        verify(kafkaTemplate).send(eq("ride.accepted"), eq("2f52e5f8-0f91-4801-98db-ece474d38a13"), rideAcceptedCaptor.capture());
         DriverAcceptedEvent event = (DriverAcceptedEvent) rideAcceptedCaptor.getValue();
         assertThat(event.getRideId()).isEqualTo("2f52e5f8-0f91-4801-98db-ece474d38a13");
         assertThat(event.getDriverId()).isEqualTo("driver-2");
-        assertThat(event.getEventType()).isEqualTo("DRIVER_ACCEPTED");
+        assertThat(event.getEventType()).isEqualTo("RIDE_ACCEPTED");
     }
 
     @Test
@@ -163,11 +159,6 @@ class DriverServiceApplicationTests {
         assertThat(response.isOffline()).isFalse();
         assertThat(response.isActiveForBooking()).isTrue();
 
-        ArgumentCaptor<Object> eventCaptor = ArgumentCaptor.forClass(Object.class);
-        verify(kafkaTemplate, atLeastOnce()).send(eq("driver.status.changed"), eventCaptor.capture());
-        DriverStatusEvent event = (DriverStatusEvent) eventCaptor.getValue();
-        assertThat(event.getDriverId()).isEqualTo("driver-3");
-        assertThat(event.getAvailabilityStatus()).isEqualTo("ONLINE");
-        assertThat(event.getActiveForBooking()).isTrue();
+        verify(valueOperations).set(eq("driver:status:driver-3"), eq("AVAILABLE"));
     }
 }

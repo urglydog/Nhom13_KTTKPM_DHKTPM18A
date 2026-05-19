@@ -17,8 +17,8 @@ spring:
         spring.json.add.type.headers: true
         spring.json.type.mapping: >
           driver-status:iuh.fit.driverservice.dto.event.DriverStatusEvent,
-          driver-accepted:iuh.fit.driverservice.dto.event.DriverAcceptedEvent,
-          driver-rejected:iuh.fit.driverservice.dto.event.DriverRejectedEvent
+          ride-accepted:iuh.fit.driverservice.dto.event.DriverAcceptedEvent,
+          ride-rejected:iuh.fit.driverservice.dto.event.DriverRejectedEvent
     consumer:
       group-id: driver-service-group
       auto-offset-reset: earliest
@@ -26,4 +26,9 @@ spring:
       value-deserializer: org.springframework.kafka.support.serializer.JsonDeserializer
       properties:
         spring.json.trusted.packages: "*"
+        spring.json.type.mapping: >
+          ride-assigned:iuh.fit.driverservice.dto.event.RideAssignedEvent,
+          ride-completed:iuh.fit.driverservice.dto.event.RideLifecycleEvent,
+          ride-cancelled:iuh.fit.driverservice.dto.event.RideLifecycleEvent,
+          payment-completed:iuh.fit.driverservice.dto.event.PaymentCompletedEvent
         spring.json.value.default.type: java.util.Map

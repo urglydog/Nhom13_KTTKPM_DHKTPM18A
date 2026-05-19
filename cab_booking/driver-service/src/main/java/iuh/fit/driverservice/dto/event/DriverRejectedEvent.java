@@ -10,7 +10,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor
 @AllArgsConstructor
 public class DriverRejectedEvent {
-    public static final String EVENT_TYPE = "DRIVER_REJECTED";
+    public static final String EVENT_TYPE = "RIDE_REJECTED";
 
     private String eventId;
     private String eventType;

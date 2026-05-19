@@ -97,8 +97,6 @@ public class DriverProfileService {
 
         DriverProfile savedProfile = driverProfileRepository.save(profile);
         driverStatusService.writeDriverStatus(savedProfile);
-        driverStatusService.publishDriverStatusChanged(savedProfile, savedProfile.getCurrentRideId(),
-                driverStatusService.currentRideStatusName(savedProfile));
         return toAvailabilityResponse(savedProfile);
     }
 
@@ -147,8 +145,6 @@ public class DriverProfileService {
     public DriverStatusCheckResponse checkAvailability(String externalUserId) {
         DriverProfile profile = getRequiredProfile(externalUserId);
         driverStatusService.writeDriverStatus(profile);
-        driverStatusService.publishDriverStatusChanged(profile, profile.getCurrentRideId(),
-                driverStatusService.currentRideStatusName(profile));
         return toStatusCheckResponse(profile);
     }
 

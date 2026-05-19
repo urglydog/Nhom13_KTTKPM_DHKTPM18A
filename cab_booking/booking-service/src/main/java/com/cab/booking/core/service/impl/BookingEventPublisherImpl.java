@@ -17,9 +17,8 @@ public class BookingEventPublisherImpl implements BookingEventPublisher {
 
     @Override
     public void publishRideCreated(RideCreatedEvent event) {
-        kafkaTemplate.send("booking.created", event.rideId(), event);
         kafkaTemplate.send("ride.created", event.rideId(), event);
-        log.info("Published booking.created and legacy ride.created | key={}", event.rideId());
+        log.info("Published ride.created | key={}", event.rideId());
     }
 
     @Override
