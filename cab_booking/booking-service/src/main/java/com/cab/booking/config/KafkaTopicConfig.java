@@ -14,33 +14,18 @@ public class KafkaTopicConfig {
     }
 
     @Bean
-    public NewTopic bookingCreatedTopic() {
-        return TopicBuilder.name("booking.created").partitions(3).replicas(1).build();
-    }
-
-    @Bean
-    public NewTopic driverMatchedTopic() {
-        return TopicBuilder.name("driver.matched").partitions(3).replicas(1).build();
-    }
-
-    @Bean
     public NewTopic rideAssignedTopic() {
         return TopicBuilder.name("ride.assigned").partitions(3).replicas(1).build();
     }
 
     @Bean
-    public NewTopic driverAssignedTopic() {
-        return TopicBuilder.name("driver.assigned").partitions(3).replicas(1).build();
+    public NewTopic rideAcceptedTopic() {
+        return TopicBuilder.name("ride.accepted").partitions(3).replicas(1).build();
     }
 
     @Bean
-    public NewTopic driverAcceptedTopic() {
-        return TopicBuilder.name("driver.accepted").partitions(3).replicas(1).build();
-    }
-
-    @Bean
-    public NewTopic driverRejectedTopic() {
-        return TopicBuilder.name("driver.rejected").partitions(3).replicas(1).build();
+    public NewTopic rideRejectedTopic() {
+        return TopicBuilder.name("ride.rejected").partitions(3).replicas(1).build();
     }
 
     @Bean
@@ -66,5 +51,10 @@ public class KafkaTopicConfig {
     @Bean
     public NewTopic paymentCompletedTopic() {
         return TopicBuilder.name("payment.completed").partitions(3).replicas(1).build();
+    }
+
+    @Bean
+    public NewTopic paymentFailedTopic() {
+        return TopicBuilder.name("payment.failed").partitions(3).replicas(1).build();
     }
 }

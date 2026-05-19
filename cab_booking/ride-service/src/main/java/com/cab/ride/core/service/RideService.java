@@ -47,7 +47,7 @@ public class RideService {
         UUID uuid = parseUuid(rideId);
         return rideRepository.findById(uuid)
                 .map(existing -> {
-                    log.info("[RideService] Duplicate booking.created ignored: rideId={} status={}", rideId, existing.getStatus());
+                    log.info("[RideService] Duplicate ride.created ignored: rideId={} status={}", rideId, existing.getStatus());
                     return existing;
                 })
                 .orElseGet(() -> {
@@ -61,7 +61,7 @@ public class RideService {
                             .status(RideStatus.CREATED)
                             .build();
                     Ride saved = rideRepository.save(ride);
-                    log.info("[RideService] Ride created from booking.created: rideId={} customerId={}",
+                    log.info("[RideService] Ride created from ride.created: rideId={} customerId={}",
                             rideId, event.getCustomerId());
                     return saved;
                 });
@@ -116,11 +116,11 @@ public class RideService {
                 .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException("Ride not found: " + event.aggregateId()));
 
         if (ride.getStatus() == RideStatus.ACCEPTED) {
-            log.info("[RideService] Duplicate driver.accepted ignored: rideId={}", event.aggregateId());
+            log.info("[RideService] Duplicate ride.accepted ignored: rideId={}", event.aggregateId());
             return ride;
         }
         if (ride.getStatus() != RideStatus.ASSIGNED) {
-            log.warn("[RideService] Invalid driver.accepted transition: rideId={} | current={}",
+            log.warn("[RideService] Invalid ride.accepted transition: rideId={} | current={}",
                     event.aggregateId(), ride.getStatus());
             return ride;
         }
@@ -305,6 +305,7 @@ public class RideService {
                 .type(RideFinishedEvent.EVENT_TYPE)
                 .rideId(event.aggregateId())
                 .customerId(ride.getCustomerId())
+                .driverId(ride.getDriverId())
                 .finalFare(event.getFinalFare() == null ? BigDecimal.ZERO : event.getFinalFare())
                 .paymentMethod(event.getPaymentMethod() == null ? "CASH" : event.getPaymentMethod())
                 .timestamp(Instant.now().toString())

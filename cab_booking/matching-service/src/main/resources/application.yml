@@ -20,8 +20,7 @@ spring:
         spring.json.add.type.headers: true
         # MATCHING LÀ NGƯỜI PHÁT RA RIDE-ASSIGNED
         spring.json.type.mapping: >
-          booking-created:com.cab.matching.core.dto.event.inbound.RideCreatedEvent,
-          driver-assigned:com.cab.matching.core.dto.event.outbound.RideAssignedEvent,
+          matching-retry-requested:com.cab.matching.core.dto.event.inbound.RideCreatedEvent,
           ride-assigned:com.cab.matching.core.dto.event.outbound.RideAssignedEvent
     consumer:
       group-id: matching-group
@@ -34,11 +33,12 @@ spring:
         spring.json.trusted.packages: "*"
         spring.json.use.type.headers: true
         spring.json.type.mapping: >
-          booking.created:com.cab.matching.core.dto.event.inbound.RideCreatedEvent,
-          booking-created:com.cab.matching.core.dto.event.inbound.RideCreatedEvent,
           ride.created:com.cab.matching.core.dto.event.inbound.RideCreatedEvent,
           ride-created:com.cab.matching.core.dto.event.inbound.RideCreatedEvent,
-          driver-rejected:com.cab.matching.core.dto.event.inbound.DriverRejectedEvent,
+          matching.retry.requested:com.cab.matching.core.dto.event.inbound.RideCreatedEvent,
+          matching-retry-requested:com.cab.matching.core.dto.event.inbound.RideCreatedEvent,
+          ride-rejected:com.cab.matching.core.dto.event.inbound.DriverRejectedEvent,
+          ride.cancelled:com.cab.matching.core.dto.event.inbound.RideCancelledEvent,
           ride-cancelled:com.cab.matching.core.dto.event.inbound.RideCancelledEvent
 
   data:
