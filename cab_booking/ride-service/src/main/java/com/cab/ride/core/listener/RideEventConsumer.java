@@ -19,41 +19,35 @@ public class RideEventConsumer {
 
     private final RideService rideService;
 
-    @KafkaListener(topics = {"booking.created", "ride.created"}, groupId = GROUP_ID)
+    @KafkaListener(topics = "ride.created", groupId = GROUP_ID)
     public void handleRideCreated(RideCreatedEvent event) {
-        log.info("[booking.created] rideId={} | customerId={}", event.aggregateId(), event.getCustomerId());
+        log.info("[ride.created] rideId={} | customerId={}", event.aggregateId(), event.getCustomerId());
         try {
             rideService.createRideFromBooking(event);
         } catch (Exception ex) {
-            log.error("Failed to create ride from booking event rideId={}: {}",
+            log.error("Failed to create ride from ride.created event rideId={}: {}",
                     event.aggregateId(), ex.getMessage(), ex);
         }
     }
 
-    @KafkaListener(topics = "driver.assigned", groupId = GROUP_ID)
-    public void handleDriverAssigned(RideAssignedEvent event) {
-        handleAssigned(event);
-    }
-
-    // Compatibility while matching-service still publishes the old topic.
     @KafkaListener(topics = "ride.assigned", groupId = GROUP_ID)
-    public void handleLegacyRideAssigned(RideAssignedEvent event) {
+    public void handleRideAssigned(RideAssignedEvent event) {
         handleAssigned(event);
     }
 
-    @KafkaListener(topics = "driver.accepted", groupId = GROUP_ID)
-    public void handleDriverAccepted(DriverAcceptedEvent event) {
-        log.info("[driver.accepted] rideId={} | driverId={}", event.aggregateId(), event.getDriverId());
+    @KafkaListener(topics = "ride.accepted", groupId = GROUP_ID)
+    public void handleRideAccepted(DriverAcceptedEvent event) {
+        log.info("[ride.accepted] rideId={} | driverId={}", event.aggregateId(), event.getDriverId());
         try {
             rideService.markDriverAccepted(event);
         } catch (Exception ex) {
-            log.error("Failed to handle driver.accepted for rideId={}: {}",
+            log.error("Failed to handle ride.accepted for rideId={}: {}",
                     event.aggregateId(), ex.getMessage(), ex);
         }
     }
 
     private void handleAssigned(RideAssignedEvent event) {
-        log.info("[driver.assigned] rideId={} | driverId={}", event.aggregateId(), event.getDriverId());
+        log.info("[ride.assigned] rideId={} | driverId={}", event.aggregateId(), event.getDriverId());
 
         if (event.aggregateId() == null || event.aggregateId().isBlank()) {
             log.error("Assignment event has no rideId/bookingId, skipping.");

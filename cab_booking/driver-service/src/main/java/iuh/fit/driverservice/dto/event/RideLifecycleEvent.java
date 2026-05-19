@@ -9,13 +9,17 @@ import lombok.NoArgsConstructor;
 @Builder
 @NoArgsConstructor
 @AllArgsConstructor
-public class DriverAcceptedEvent {
-    public static final String EVENT_TYPE = "RIDE_ACCEPTED";
-
+public class RideLifecycleEvent {
     private String eventId;
     private String eventType;
+    private String type;
     private String rideId;
     private String bookingId;
     private String driverId;
+    private String reason;
     private String timestamp;
+
+    public String aggregateId() {
+        return rideId != null && !rideId.isBlank() ? rideId : bookingId;
+    }
 }

@@ -5,6 +5,7 @@ import com.cab.matching.client.AiScoringResponse;
 import com.cab.matching.client.DriverFeatureDto;
 import com.cab.matching.client.RankingEntry;
 import com.cab.matching.core.dto.event.inbound.DriverRejectedEvent;
+import com.cab.matching.core.dto.event.inbound.RideCancelledEvent;
 import com.cab.matching.core.dto.event.inbound.RideCreatedEvent;
 import com.cab.matching.core.dto.event.outbound.RideAssignedEvent;
 import com.cab.matching.core.enums.VehicleType;
@@ -42,15 +43,23 @@ public class MatchingService {
     private static final String DRIVER_PROFILE_PREFIX = "driver:profile:";
     private static final String DRIVER_LOCK_PREFIX = "driver:lock:";
     private static final String MATCHING_REQUEST_PREFIX = "matching:request:";
+    private static final String MATCHING_LOCK_PREFIX = "matching:lock:";
+    private static final String MATCHING_ASSIGNED_PREFIX = "matching:assigned:";
+    private static final String MATCHING_FAILED_PREFIX = "matching:failed:";
+    private static final String MATCHING_DRIVER_PREFIX = "matching:driver:";
+    private static final String MATCHING_ATTEMPT_PREFIX = "matching:attempt:";
     private static final String DRIVER_STATUS_AVAILABLE = "AVAILABLE";
     private static final String DRIVER_LOCK_VALUE = "LOCKED";
+    private static final String MATCHING_LOCK_VALUE = "LOCKED";
     private static final String BOOKING_CANCELLED_PREFIX = "booking:cancelled:";
     private static final long LOCK_TTL_SECONDS = 60L;
+    private static final long MATCHING_LOCK_TTL_SECONDS = 60L;
+    private static final long MATCHING_STATE_TTL_HOURS = 2L;
+    private static final long RETRY_DELAY_SECONDS = 5L;
     private static final int MAX_MATCHING_ATTEMPTS = 3;
-    private static final String TOPIC_DRIVER_ASSIGNED = "driver.assigned";
-    private static final String TOPIC_RIDE_ASSIGNED_LEGACY = "ride.assigned";
-    private static final String TOPIC_BOOKING_CREATED = "booking.created";
-    private static final String TOPIC_RIDE_CREATED_LEGACY = "ride.created";
+    private static final String TOPIC_RIDE_ASSIGNED = "ride.assigned";
+    private static final String TOPIC_MATCHING_RETRY_REQUESTED = "matching.retry.requested";
+    private static final String TOPIC_MATCHING_FAILED = "matching.failed";
 
     private final RedisTemplate<String, String> redisTemplate;
     private final AiScoringClient aiScoringClient;
@@ -59,11 +68,51 @@ public class MatchingService {
     private final Random random = new Random();
 
     public void processMatching(RideCreatedEvent event) {
-        cacheMatchingRequest(event);
-        if (isBookingCancelled(event.rideId())) {
-            log.info("Skip matching cancelled rideId={}", event.rideId());
+        if (event == null || event.rideId() == null || event.rideId().isBlank()) {
+            log.warn("Skip matching event without rideId");
             return;
         }
+
+        String rideId = event.rideId();
+        if (isBookingCancelled(rideId)) {
+            log.info("Skip matching cancelled rideId={}", rideId);
+            return;
+        }
+        if (hasAssigned(rideId)) {
+            log.info("Skip duplicate matching event because ride is already assigned | rideId={}", rideId);
+            return;
+        }
+        if (hasFailed(rideId)) {
+            log.info("Skip duplicate matching event because ride already reached final matching failure | rideId={}", rideId);
+            return;
+        }
+
+        int eventAttempt = event.attemptOrDefault();
+        int latestAttempt = latestAttempt(rideId);
+        if (latestAttempt >= eventAttempt) {
+            log.info("Skip duplicate/stale matching event | rideId={} | eventAttempt={} | latestAttempt={}",
+                    rideId, eventAttempt, latestAttempt);
+            return;
+        }
+
+        String matchingLockKey = MATCHING_LOCK_PREFIX + rideId;
+        Boolean locked = redisTemplate.opsForValue()
+                .setIfAbsent(matchingLockKey, MATCHING_LOCK_VALUE, MATCHING_LOCK_TTL_SECONDS, TimeUnit.SECONDS);
+        if (!Boolean.TRUE.equals(locked)) {
+            log.info("Matching already in progress, skip duplicate | rideId={}", rideId);
+            return;
+        }
+
+        try {
+            recordAttempt(rideId, eventAttempt);
+            processMatchingAttempt(event);
+        } finally {
+            redisTemplate.delete(matchingLockKey);
+        }
+    }
+
+    private void processMatchingAttempt(RideCreatedEvent event) {
+        cacheMatchingRequest(event);
 
         VehicleType requestedVehicleType;
         try {
@@ -140,10 +189,10 @@ public class MatchingService {
                         .timestamp(Instant.now().toString())
                         .build();
 
-                kafkaTemplate.send(TOPIC_DRIVER_ASSIGNED, event.rideId(), assignedEvent);
-                kafkaTemplate.send(TOPIC_RIDE_ASSIGNED_LEGACY, event.rideId(), assignedEvent);
+                kafkaTemplate.send(TOPIC_RIDE_ASSIGNED, event.rideId(), assignedEvent);
+                markAssigned(event.rideId(), driverId);
 
-                log.info("Published driver.assigned and legacy ride.assigned | rideId={} | driverId={}",
+                log.info("Published ride.assigned | rideId={} | driverId={}",
                         event.rideId(), driverId);
                 return;
             }
@@ -237,9 +286,17 @@ public class MatchingService {
     public void processDriverRejected(DriverRejectedEvent event) {
         String rideId = event.aggregateId();
         if (rideId == null || rideId.isBlank()) {
-            log.warn("Skip driver.rejected without rideId");
+            log.warn("Skip ride.rejected without rideId");
             return;
         }
+
+        String rejectedDriverId = normalizeDriverId(event.getDriverId());
+        if (rejectedDriverId != null && !rejectedDriverId.isBlank()) {
+            redisTemplate.delete(DRIVER_LOCK_PREFIX + rejectedDriverId);
+            log.info("Released driver lock after ride.rejected | rideId={} | driverId={}", rideId, rejectedDriverId);
+        }
+        redisTemplate.delete(MATCHING_ASSIGNED_PREFIX + rideId);
+        redisTemplate.delete(MATCHING_DRIVER_PREFIX + rideId);
 
         RideCreatedEvent cached = restoreMatchingRequest(rideId, event.getDriverId());
         if (cached == null) {
@@ -255,6 +312,8 @@ public class MatchingService {
         if (currentAttempt >= MAX_MATCHING_ATTEMPTS || isBookingCancelled(event.rideId())) {
             log.warn("No retry for rideId={} | attempt={} | cancelled={}",
                     event.rideId(), currentAttempt, isBookingCancelled(event.rideId()));
+            markFailed(event.rideId(), "NO_DRIVER_AVAILABLE");
+            publishMatchingFailed(event, currentAttempt, "NO_DRIVER_AVAILABLE");
             return;
         }
 
@@ -293,16 +352,73 @@ public class MatchingService {
                 Instant.now().toString()
         );
 
-        java.util.concurrent.CompletableFuture.delayedExecutor(5, TimeUnit.SECONDS).execute(() -> {
+        java.util.concurrent.CompletableFuture.delayedExecutor(RETRY_DELAY_SECONDS, TimeUnit.SECONDS).execute(() -> {
             if (isBookingCancelled(event.rideId())) {
                 log.info("Skip scheduled retry for cancelled rideId={}", event.rideId());
                 return;
             }
-            kafkaTemplate.send(TOPIC_BOOKING_CREATED, retryEvent.rideId(), retryEvent);
-            kafkaTemplate.send(TOPIC_RIDE_CREATED_LEGACY, retryEvent.rideId(), retryEvent);
-            log.info("Scheduled matching retry published | rideId={} | attempt={} | radiusKm={}",
-                    retryEvent.rideId(), retryEvent.matchingAttempt(), retryEvent.searchRadiusKm());
+            kafkaTemplate.send(TOPIC_MATCHING_RETRY_REQUESTED, retryEvent.rideId(), retryEvent);
+            log.info("Scheduled matching retry requested | topic={} | rideId={} | attempt={} | radiusKm={} | delaySeconds={}",
+                    TOPIC_MATCHING_RETRY_REQUESTED, retryEvent.rideId(), retryEvent.matchingAttempt(),
+                    retryEvent.searchRadiusKm(), RETRY_DELAY_SECONDS);
         });
+    }
+
+    public void processRideCancelled(RideCancelledEvent event) {
+        String rideId = event.getRideId() != null ? event.getRideId() : event.getBookingId();
+        if (rideId == null || rideId.isBlank()) {
+            log.warn("Skip ride.cancelled without rideId/bookingId");
+            return;
+        }
+
+        redisTemplate.opsForValue().set(BOOKING_CANCELLED_PREFIX + rideId, "true", MATCHING_STATE_TTL_HOURS, TimeUnit.HOURS);
+        releaseAssignedDriverLock(rideId, event.getDriverId());
+        redisTemplate.delete(MATCHING_LOCK_PREFIX + rideId);
+        redisTemplate.delete(MATCHING_REQUEST_PREFIX + rideId);
+        redisTemplate.delete(MATCHING_ASSIGNED_PREFIX + rideId);
+        redisTemplate.delete(MATCHING_DRIVER_PREFIX + rideId);
+        redisTemplate.delete(MATCHING_ATTEMPT_PREFIX + rideId);
+        log.info("Processed ride.cancelled cleanup in matching-service | rideId={}", rideId);
+    }
+
+    private void markAssigned(String rideId, String driverId) {
+        redisTemplate.opsForValue().set(MATCHING_ASSIGNED_PREFIX + rideId, "true", MATCHING_STATE_TTL_HOURS, TimeUnit.HOURS);
+        redisTemplate.opsForValue().set(MATCHING_DRIVER_PREFIX + rideId, driverId, MATCHING_STATE_TTL_HOURS, TimeUnit.HOURS);
+    }
+
+    private void markFailed(String rideId, String reason) {
+        redisTemplate.opsForValue().set(MATCHING_FAILED_PREFIX + rideId, reason, MATCHING_STATE_TTL_HOURS, TimeUnit.HOURS);
+        releaseAssignedDriverLock(rideId, null);
+    }
+
+    private void recordAttempt(String rideId, int attempt) {
+        redisTemplate.opsForValue().set(MATCHING_ATTEMPT_PREFIX + rideId, Integer.toString(attempt),
+                MATCHING_STATE_TTL_HOURS, TimeUnit.HOURS);
+    }
+
+    private void publishMatchingFailed(RideCreatedEvent event, int attempt, String reason) {
+        Map<String, Object> failedEvent = new HashMap<>();
+        failedEvent.put("eventId", UUID.randomUUID().toString());
+        failedEvent.put("eventType", "MATCHING_FAILED");
+        failedEvent.put("rideId", event.rideId());
+        failedEvent.put("bookingId", event.rideId());
+        failedEvent.put("customerId", event.customerId());
+        failedEvent.put("attempt", attempt);
+        failedEvent.put("reason", reason);
+        failedEvent.put("timestamp", Instant.now().toString());
+        kafkaTemplate.send(TOPIC_MATCHING_FAILED, event.rideId(), failedEvent);
+        log.warn("Published matching.failed | rideId={} | attempt={} | reason={}", event.rideId(), attempt, reason);
+    }
+
+    private void releaseAssignedDriverLock(String rideId, String driverIdFromEvent) {
+        String driverId = normalizeDriverId(driverIdFromEvent);
+        if (driverId == null || driverId.isBlank()) {
+            driverId = redisTemplate.opsForValue().get(MATCHING_DRIVER_PREFIX + rideId);
+        }
+        if (driverId != null && !driverId.isBlank()) {
+            redisTemplate.delete(DRIVER_LOCK_PREFIX + driverId);
+            log.info("Released driver lock | rideId={} | driverId={}", rideId, driverId);
+        }
     }
 
     private VehicleType resolveDriverVehicleType(String driverId) {
@@ -458,6 +574,18 @@ public class MatchingService {
 
     private boolean isBookingCancelled(String rideId) {
         return Boolean.TRUE.equals(redisTemplate.hasKey(BOOKING_CANCELLED_PREFIX + rideId));
+    }
+
+    private boolean hasAssigned(String rideId) {
+        return Boolean.TRUE.equals(redisTemplate.hasKey(MATCHING_ASSIGNED_PREFIX + rideId));
+    }
+
+    private boolean hasFailed(String rideId) {
+        return Boolean.TRUE.equals(redisTemplate.hasKey(MATCHING_FAILED_PREFIX + rideId));
+    }
+
+    private int latestAttempt(String rideId) {
+        return parseInt(redisTemplate.opsForValue().get(MATCHING_ATTEMPT_PREFIX + rideId), 0);
     }
 
     private String normalizeDriverId(String driverId) {

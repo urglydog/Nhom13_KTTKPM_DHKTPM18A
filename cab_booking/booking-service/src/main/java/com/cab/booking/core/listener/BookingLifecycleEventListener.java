@@ -2,7 +2,6 @@ package com.cab.booking.core.listener;
 
 import com.cab.booking.core.dto.event.inbound.DriverAcceptedEvent;
 import com.cab.booking.core.dto.event.inbound.DriverRejectedEvent;
-import com.cab.booking.core.dto.event.inbound.DriverStatusEvent;
 import com.cab.booking.core.dto.event.inbound.PaymentCompletedEvent;
 import com.cab.booking.core.dto.event.inbound.PaymentFailedEvent;
 import com.cab.booking.core.dto.event.inbound.RideArrivedEvent;
@@ -31,22 +30,15 @@ public class BookingLifecycleEventListener {
     private final BookingService bookingService;
     private final BookingStateMachine bookingStateMachine;
 
-    @KafkaListener(topics = "driver.assigned", groupId = "booking-service-group")
-    @Transactional
-    public void handleDriverAssigned(RideAssignedEvent event) {
-        handleAssignmentEvent(event);
-    }
-
-    // Compatibility while matching-service still publishes the old topic.
     @KafkaListener(topics = "ride.assigned", groupId = "booking-service-group")
     @Transactional
-    public void handleLegacyRideAssigned(RideAssignedEvent event) {
+    public void handleRideAssigned(RideAssignedEvent event) {
         handleAssignmentEvent(event);
     }
 
-    @KafkaListener(topics = "driver.accepted", groupId = "booking-service-group")
-    public void handleDriverAccepted(DriverAcceptedEvent event) {
-        log.info("[driver.accepted] rideId={} | driverId={}", event.aggregateId(), event.getDriverId());
+    @KafkaListener(topics = "ride.accepted", groupId = "booking-service-group")
+    public void handleRideAccepted(DriverAcceptedEvent event) {
+        log.info("[ride.accepted] rideId={} | driverId={}", event.aggregateId(), event.getDriverId());
         try {
             UUID rideId = UUID.fromString(event.aggregateId());
             Booking booking = bookingRepository.findById(rideId).orElse(null);
@@ -55,22 +47,22 @@ public class BookingLifecycleEventListener {
                 return;
             }
             if (hasReachedOrPassed(booking.getStatus(), BookingStatus.ACCEPTED)) {
-                log.info("Booking {} is already {}, ignoring duplicate/late driver.accepted", rideId, booking.getStatus());
+                log.info("Booking {} is already {}, ignoring duplicate/late ride.accepted", rideId, booking.getStatus());
                 return;
             }
             if (booking.getStatus() != BookingStatus.ASSIGNED) {
-                log.warn("Booking {} is {}, skipping driver.accepted", rideId, booking.getStatus());
+                log.warn("Booking {} is {}, skipping ride.accepted", rideId, booking.getStatus());
                 return;
             }
             bookingService.acceptRide(rideId, event.getDriverId());
         } catch (Exception ex) {
-            log.error("Error processing driver.accepted for rideId={}: {}", event.aggregateId(), ex.getMessage());
+            log.error("Error processing ride.accepted for rideId={}: {}", event.aggregateId(), ex.getMessage());
         }
     }
 
-    @KafkaListener(topics = "driver.rejected", groupId = "booking-service-group")
-    public void handleDriverRejected(DriverRejectedEvent event) {
-        log.info("[driver.rejected] rideId={} | driverId={} | reason={}",
+    @KafkaListener(topics = "ride.rejected", groupId = "booking-service-group")
+    public void handleRideRejected(DriverRejectedEvent event) {
+        log.info("[ride.rejected] rideId={} | driverId={} | reason={}",
                 event.aggregateId(),
                 event.getDriverId(),
                 event.getReason());
@@ -82,24 +74,13 @@ public class BookingLifecycleEventListener {
                 return;
             }
             if (booking.getStatus() == BookingStatus.MATCHING || hasReachedOrPassed(booking.getStatus(), BookingStatus.ACCEPTED)) {
-                log.info("Booking {} is {}, ignoring duplicate/late driver.rejected", rideId, booking.getStatus());
+                log.info("Booking {} is {}, ignoring duplicate/late ride.rejected", rideId, booking.getStatus());
                 return;
             }
             bookingService.rejectAssignedRide(rideId, event.getDriverId(), event.getReason());
         } catch (Exception ex) {
-            log.error("Error processing driver.rejected for rideId={}: {}", event.aggregateId(), ex.getMessage());
+            log.error("Error processing ride.rejected for rideId={}: {}", event.aggregateId(), ex.getMessage());
         }
-    }
-
-    @KafkaListener(topics = "driver.status.changed", groupId = "booking-service-group")
-    public void handleDriverStatusChanged(DriverStatusEvent event) {
-        log.info(
-                "[driver.status.changed] driverId={} | availability={} | activeForBooking={} | rideId={} | rideStatus={}",
-                event.getDriverId(),
-                event.getAvailabilityStatus(),
-                event.getActiveForBooking(),
-                event.getRideId(),
-                event.getRideStatus());
     }
 
     @KafkaListener(topics = "ride.arrived", groupId = "booking-service-group")
@@ -122,13 +103,11 @@ public class BookingLifecycleEventListener {
 
     @KafkaListener(topics = "payment.completed", groupId = "booking-service-group")
     public void handlePaymentCompleted(PaymentCompletedEvent event) {
-        log.info("[payment.completed] rideId={} | eventId={}", event.getRideId(), event.getEventId());
+        log.info("[payment.completed] rideId={} | bookingId={} | eventId={} | amount={}",
+                event.getRideId(), event.getBookingId(), event.getEventId(), event.getAmount());
 
-        UUID rideId;
-        try {
-            rideId = UUID.fromString(event.getRideId());
-        } catch (IllegalArgumentException ex) {
-            log.error("Invalid rideId '{}', skipping event.", event.getRideId());
+        UUID rideId = resolveRideId(event.getRideId(), event.getBookingId(), "payment.completed");
+        if (rideId == null) {
             return;
         }
 
@@ -154,11 +133,19 @@ public class BookingLifecycleEventListener {
 
     @KafkaListener(topics = "payment.failed", groupId = "booking-service-group")
     public void handlePaymentFailed(PaymentFailedEvent event) {
-        log.info("[payment.failed] rideId={} | reason={}", event.getRideId(), event.getReason());
+        UUID rideId = resolveRideId(event.getRideId(), event.getBookingId(), "payment.failed");
+        log.info("[payment.failed] rideId={} | bookingId={} | status={} | reason={}",
+                event.getRideId(), event.getBookingId(), event.getStatus(), event.getReason());
+        if (rideId == null) {
+            return;
+        }
+        if (!bookingRepository.existsById(rideId)) {
+            log.warn("Booking not found for payment.failed | rideId={} | reason={}", rideId, event.getReason());
+        }
     }
 
     private void handleAssignmentEvent(RideAssignedEvent event) {
-        log.info("[driver.assigned] rideId={} | driverId={}", event.aggregateId(), event.getDriverId());
+        log.info("[ride.assigned] rideId={} | driverId={}", event.aggregateId(), event.getDriverId());
 
         UUID rideId;
         try {
@@ -219,6 +206,20 @@ public class BookingLifecycleEventListener {
 
     private boolean hasReachedOrPassed(BookingStatus current, BookingStatus target) {
         return statusRank(current) >= statusRank(target);
+    }
+
+    private UUID resolveRideId(String rideId, String bookingId, String topic) {
+        String id = rideId != null && !rideId.isBlank() ? rideId : bookingId;
+        if (id == null || id.isBlank()) {
+            log.error("{} event has no rideId/bookingId, skipping.", topic);
+            return null;
+        }
+        try {
+            return UUID.fromString(id);
+        } catch (IllegalArgumentException ex) {
+            log.error("Invalid rideId/bookingId '{}' from {}, skipping event.", id, topic);
+            return null;
+        }
     }
 
     private int statusRank(BookingStatus status) {
