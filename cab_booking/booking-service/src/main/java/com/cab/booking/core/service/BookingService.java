@@ -13,21 +13,17 @@ public interface BookingService {
 
     BookingResponse rejectAssignedRide(UUID bookingId, String driverId, String reason);
     
-    BookingResponse startRide(UUID bookingId);
-    
-    BookingResponse completeRide(UUID bookingId);
-
     // ==========================================
     // CÁC API BỔ SUNG CHO KHÁCH HÀNG & TÀI XẾ
     // ==========================================
 
     org.springframework.data.domain.Page<BookingResponse> getCustomerHistory(String customerId, int page, int size);
 
+    BookingResponse getBookingById(java.util.UUID bookingId);
+
     BookingResponse getActiveBookingByCustomer(String customerId);
 
     BookingResponse cancelRide(java.util.UUID bookingId, String reason);
-
-    BookingResponse arriveAtPickup(UUID bookingId);
 
     org.springframework.data.domain.Page<BookingResponse> getDriverHistory(String driverId, int page, int size);
 

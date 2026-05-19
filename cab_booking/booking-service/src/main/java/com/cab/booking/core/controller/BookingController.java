@@ -38,6 +38,11 @@ public class BookingController {
 
     private final BookingService bookingService;
 
+    @GetMapping("/health")
+    public ApiResponse<String> health() {
+        return ApiResponse.success("OK", "booking-service is running");
+    }   
+
     // ============================================================
     // HEALTH CHECK — Không yêu cầu xác thực (public)
     // ============================================================
@@ -96,6 +101,12 @@ public class BookingController {
     // ============================================================
     // API KHÁCH HÀNG (CUSTOMER)
     // ============================================================
+
+    @GetMapping("/{id}")
+    public ApiResponse<BookingResponse> getBookingById(@PathVariable UUID id) {
+        return ApiResponse.success("Lấy thông tin chuyến đi thành công",
+                bookingService.getBookingById(id));
+    }
 
     @GetMapping("/customer/{customerId}")
     public ApiResponse<org.springframework.data.domain.Page<BookingResponse>> getCustomerHistory(

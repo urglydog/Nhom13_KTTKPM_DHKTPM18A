@@ -21,7 +21,7 @@ spring:
       routes:
         # route-level RequestRateLimiter
         - id: auth-service
-          uri: http://auth-service:8081
+          uri: lb://auth-service
           predicates:
             - Path=/api/auth/**
           filters:
@@ -39,20 +39,57 @@ spring:
           predicates:
             - Path=/api/notifications/**
 
+        # Socket.IO WebSockets Route
+        - id: notification-service-websocket
+          uri: ws://notification-service:9093
+          predicates:
+            - Path=/socket.io/**
+
+        # Socket.IO HTTP Polling Fallback
+        - id: notification-service-socketio-http
+          uri: http://notification-service:9093
+          predicates:
+            - Path=/socket.io/**
+
         - id: user-service
           uri: lb://user-service
           predicates:
-            - Path=/api/users/**
+            - Path=/api/users/**,/api/admin/users/**
 
         - id: driver-service
           uri: lb://driver-service
           predicates:
-            - Path=/api/drivers/**
+            - Path=/api/drivers/**,/api/admin/drivers/**
 
         - id: review-service
           uri: lb://review-service
           predicates:
             - Path=/api/reviews/**
+
+        - id: booking-service
+          uri: lb://booking-service
+          predicates:
+            - Path=/api/v1/bookings/**
+
+        - id: ride-service
+          uri: lb://ride-service
+          predicates:
+            - Path=/api/v1/rides/**
+
+        - id: pricing-service
+          uri: lb://pricing-service
+          predicates:
+            - Path=/api/pricing/**
+
+        - id: payment-service
+          uri: lb://payment-service
+          predicates:
+            - Path=/api/payments/**
+
+        - id: ai-scoring-service
+          uri: http://cab-ai-scoring-service:8000
+          predicates:
+            - Path=/api/v1/ai/**
 
       default-filters:
         - name: Retry
