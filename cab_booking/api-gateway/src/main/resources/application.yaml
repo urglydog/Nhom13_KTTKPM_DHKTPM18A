@@ -65,6 +65,11 @@ spring:
           predicates:
             - Path=/api/pricing/**
 
+        - id: payment-service
+          uri: lb://payment-service
+          predicates:
+            - Path=/api/payments/**
+
         - id: review-service
           uri: lb://review-service
           predicates:
