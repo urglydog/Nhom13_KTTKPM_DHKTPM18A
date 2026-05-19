@@ -85,7 +85,7 @@ public class PaymentTransaction {
     @PrePersist
     public void prePersist() {
         if (id == null) id = UUID.randomUUID();
-        if (transactionId == null) transactionId = "txn_" + UUID.randomUUID().toString().replace("-", "").substring(0, 12);
+        if (transactionId == null) transactionId = "TXN" + UUID.randomUUID().toString().replace("-", "").substring(0, 12).toUpperCase();
         if (status == null) status = PaymentStatus.INIT;
         if (retryCount < 0) retryCount = 0;
         if (createdAt == null) createdAt = Instant.now();

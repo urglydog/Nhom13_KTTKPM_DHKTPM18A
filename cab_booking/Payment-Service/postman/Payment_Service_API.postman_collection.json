@@ -2,12 +2,12 @@
   "info": {
     "_postman_id": "4b9f3e4b-9c2f-4512-87a1-2d7c58f0c1a1",
     "name": "Payment Service API",
-    "description": "APIs for testing Payment Service with JWT authentication",
+    "description": "APIs for testing Payment Service with JWT authentication. VNPay flow: run charge request, copy/open saved vnpay_pay_url, pay with NCB test card, then check booking/transaction status.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "item": [
     {
-      "name": "Thanh toán ZaloPay (Có JWT)",
+      "name": "Thanh toan ZaloPay (Co JWT)",
       "request": {
         "auth": {
           "type": "bearer",
@@ -34,7 +34,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\r\n    \"bookingId\": \"B-{{$randomInt}}\",\r\n    \"customerId\": \"C-98765\",\r\n    \"amount\": 50000,\r\n    \"paymentMethod\": \"ZALOPAY\",\r\n    \"currency\": \"VND\",\r\n    \"description\": \"Thanh toan chuyen di qua ZaloPay\"\r\n}",
+          "raw": "{\n    \"bookingId\": \"B-ZALOPAY-{{$randomInt}}\",\n    \"customerId\": \"{{customer_id}}\",\n    \"amount\": 50000,\n    \"paymentMethod\": \"ZALOPAY\",\n    \"currency\": \"VND\",\n    \"description\": \"Thanh toan chuyen di qua ZaloPay\"\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -56,7 +56,196 @@
       "response": []
     },
     {
-      "name": "Lấy thông tin thanh toán theo mã giao dịch (Có JWT)",
+      "name": "Thanh toan tien mat (Co JWT)",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-Idempotency-Key",
+            "value": "{{$guid}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"bookingId\": \"B-CASH-{{$randomInt}}\",\n    \"customerId\": \"{{customer_id}}\",\n    \"amount\": 50000,\n    \"paymentMethod\": \"CASH\",\n    \"currency\": \"VND\",\n    \"description\": \"Thanh toan chuyen di bang tien mat\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/payments/charge",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "payments",
+            "charge"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "VNPay - 1. Tao payment URL (Co JWT)",
+      "event": [
+        {
+          "listen": "prerequest",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "const suffix = Date.now();",
+              "pm.collectionVariables.set('vnpay_booking_id', `B-VNPAY-${suffix}`);",
+              "pm.collectionVariables.set('vnpay_idempotency_key', `idem-vnpay-${suffix}`);"
+            ]
+          }
+        },
+        {
+          "listen": "test",
+          "script": {
+            "type": "text/javascript",
+            "exec": [
+              "pm.test('Charge request returns 2xx', function () {",
+              "    pm.expect(pm.response.code).to.be.oneOf([200, 201]);",
+              "});",
+              "",
+              "const body = pm.response.json();",
+              "const result = body.result || body.data || body;",
+              "",
+              "if (result.transactionId) {",
+              "    pm.collectionVariables.set('transaction_id', result.transactionId);",
+              "}",
+              "if (result.transactionRef) {",
+              "    pm.collectionVariables.set('vnpay_transaction_ref', result.transactionRef);",
+              "}",
+              "if (result.payUrl) {",
+              "    pm.collectionVariables.set('vnpay_pay_url', result.payUrl);",
+              "    console.log('Open this VNPay URL in browser:', result.payUrl);",
+              "}",
+              "",
+              "pm.test('VNPay payUrl is returned', function () {",
+              "    pm.expect(result.payUrl, 'payUrl').to.be.a('string').and.include('sandbox.vnpayment.vn');",
+              "});",
+              "pm.test('Payment is pending before VNPay callback', function () {",
+              "    pm.expect(result.status).to.be.oneOf(['PENDING', 'RETRY']);",
+              "});"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "X-Idempotency-Key",
+            "value": "{{vnpay_idempotency_key}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n    \"bookingId\": \"{{vnpay_booking_id}}\",\n    \"customerId\": \"{{customer_id}}\",\n    \"amount\": 50000,\n    \"paymentMethod\": \"VNPAY\",\n    \"currency\": \"VND\",\n    \"description\": \"Pay for cab booking via VNPay\",\n    \"idempotencyKey\": \"{{vnpay_idempotency_key}}\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/api/payments/charge",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "payments",
+            "charge"
+          ]
+        },
+        "description": "After sending this request, open collection variable vnpay_pay_url in a browser. Use NCB card 9704198526191432198, NGUYEN VAN A, 07/15, OTP 123456."
+      },
+      "response": []
+    },
+    {
+      "name": "VNPay - 2. Mo payment URL tren browser",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{vnpay_pay_url}}",
+          "host": [
+            "{{vnpay_pay_url}}"
+          ]
+        },
+        "description": "Postman may not render the VNPay checkout page well. Prefer copying vnpay_pay_url and opening it in Chrome/Edge."
+      },
+      "response": []
+    },
+    {
+      "name": "VNPay - 3. Kiem tra payment theo booking",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/payments/booking/{{vnpay_booking_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "payments",
+            "booking",
+            "{{vnpay_booking_id}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "VNPay - 4. Kiem tra payment theo transaction",
       "request": {
         "auth": {
           "type": "bearer",
@@ -86,7 +275,58 @@
       "response": []
     },
     {
-      "name": "ZaloPay Callback Webhook (Không JWT)",
+      "name": "VNPay - IPN URL public de gui VNPAY (Copy only, khong Send)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{public_api_url}}/api/payments/vnpay/ipn",
+          "host": [
+            "{{public_api_url}}"
+          ],
+          "path": [
+            "api",
+            "payments",
+            "vnpay",
+            "ipn"
+          ]
+        },
+        "description": "Copy this URL to VNPay sandbox/SIT IPN configuration. Do not press Send for this request because VNPay must call it with signed vnp_* query parameters."
+      },
+      "response": []
+    },
+    {
+      "name": "Lay thong tin thanh toan theo ma giao dich (Co JWT)",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{jwt_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{base_url}}/api/payments/txn/{{transaction_id}}",
+          "host": [
+            "{{base_url}}"
+          ],
+          "path": [
+            "api",
+            "payments",
+            "txn",
+            "{{transaction_id}}"
+          ]
+        }
+      },
+      "response": []
+    },
+    {
+      "name": "ZaloPay Callback Webhook (Khong JWT)",
       "request": {
         "method": "POST",
         "header": [
@@ -98,7 +338,7 @@
         ],
         "body": {
           "mode": "raw",
-          "raw": "{\r\n  \"data\": \"...\",\r\n  \"mac\": \"...\",\r\n  \"type\": 1\r\n}",
+          "raw": "{\n  \"data\": \"...\",\n  \"mac\": \"...\",\n  \"type\": 1\n}",
           "options": {
             "raw": {
               "language": "json"
@@ -144,7 +384,17 @@
   "variable": [
     {
       "key": "base_url",
+      "value": "http://localhost:8080",
+      "type": "string"
+    },
+    {
+      "key": "payment_service_url",
       "value": "http://localhost:8090",
+      "type": "string"
+    },
+    {
+      "key": "public_api_url",
+      "value": "https://scratch-heaving-create.ngrok-free.dev",
       "type": "string"
     },
     {
@@ -153,8 +403,33 @@
       "type": "string"
     },
     {
+      "key": "customer_id",
+      "value": "C-98765",
+      "type": "string"
+    },
+    {
+      "key": "vnpay_booking_id",
+      "value": "B-VNPAY-TEST",
+      "type": "string"
+    },
+    {
+      "key": "vnpay_idempotency_key",
+      "value": "idem-vnpay-test",
+      "type": "string"
+    },
+    {
       "key": "transaction_id",
       "value": "txn_12345",
+      "type": "string"
+    },
+    {
+      "key": "vnpay_transaction_ref",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "vnpay_pay_url",
+      "value": "",
       "type": "string"
     }
   ]
