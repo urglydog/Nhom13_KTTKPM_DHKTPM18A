@@ -12,6 +12,8 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Component;
 
+import java.util.Map;
+
 @Component
 @RequiredArgsConstructor
 @Slf4j
@@ -26,7 +28,7 @@ public class BookingCreatedConsumer {
             containerFactory = "kafkaListenerContainerFactory"
     )
     public void consumeBookingCreated(
-            @Payload Object payload,
+            @Payload Map<String, Object> payload,
             @Header(KafkaHeaders.RECEIVED_PARTITION) int partition,
             @Header(KafkaHeaders.OFFSET) long offset,
             @Header(KafkaHeaders.RECEIVED_KEY) String key,
